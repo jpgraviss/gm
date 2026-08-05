@@ -20,6 +20,12 @@ interface UploadedFile {
 
 export interface NewProposalFormData {
   company: string
+  // AUDIT #721 — CompanySelect already hands back the picked company's real
+  // id, but this form discarded it, so every caller had to guess a
+  // companyId from surrounding context (the Companies page hardcoded its
+  // own panel's company, which then disagreed with the name if the user
+  // changed the picker). Carrying the real id through removes the guess.
+  companyId?: string
   serviceType: ServiceType
   assignedRep: string
   value: string
@@ -60,6 +66,7 @@ export default function NewProposalPanel({ onSave, onClose }: Props) {
   const REPS = useTeamMembers()
   const [form, setForm] = useState<NewProposalFormData>({
     company: '',
+    companyId: undefined,
     serviceType: 'Website Build',
     assignedRep: 'Graviss Marketing',
     value: '',
@@ -100,7 +107,7 @@ export default function NewProposalPanel({ onSave, onClose }: Props) {
             <FieldLabel>Company</FieldLabel>
             <CompanySelect
               value={form.company}
-              onChange={(name) => set('company', name)}
+              onChange={(name, companyId) => setForm(prev => ({ ...prev, company: name, companyId }))}
               placeholder="Select a company..."
             />
           </div>

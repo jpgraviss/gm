@@ -11,6 +11,7 @@ import {
 } from 'lucide-react'
 import NewClientModal from '@/components/admin/NewClientModal'
 import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 const SERVICE_TYPES = [
   'SEO', 'PPC', 'Web Design', 'Social Media',
@@ -179,9 +180,11 @@ function NewWorkflowModal({
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/projects')
-      .then(r => r.ok ? r.json() : [])
-      .then((data: Project[]) => { if (!cancelled && Array.isArray(data)) setProjects(data) })
+    // AUDIT #698 — same unpaginated-fetch truncation as the main workflow
+    // list above, applied to /api/projects: an org with >100 projects
+    // couldn't select an older one here.
+    fetchAllPages<Project>('/api/projects')
+      .then((data) => { if (!cancelled) setProjects(data) })
       .catch(() => {})
       .finally(() => { if (!cancelled) setLoadingProjects(false) })
     return () => { cancelled = true }
@@ -276,9 +279,11 @@ export default function DeliveryDashboardPage() {
   const [deliverableSaving, setDeliverableSaving] = useState(false)
 
   useEffect(() => {
-    fetch('/api/delivery/workflow')
-      .then(r => r.ok ? r.json() : [])
-      .then((data: Workflow[]) => { if (Array.isArray(data)) setWorkflows(data) })
+    // AUDIT #698 — a plain fetch() here silently truncated at the endpoint's
+    // 100-row cursor-page limit once an org passed 100 delivery workflows,
+    // the same established bug class already fixed on 15+ other pages.
+    fetchAllPages<Workflow>('/api/delivery/workflow')
+      .then((data) => setWorkflows(data))
       .catch(() => toast('Failed to load workflows', 'error'))
       .finally(() => setLoading(false))
   }, [])

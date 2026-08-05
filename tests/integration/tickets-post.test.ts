@@ -9,10 +9,13 @@ import { NextRequest } from 'next/server'
 
 let insertPayload: Record<string, unknown> | null
 
+// Scoped by table: this route also writes a cross-module timeline entry to
+// crm_activities (lib/activity-log.ts), so an unscoped capture would record
+// that instead of the ticket insert under test.
 const mockDb = {
-  from: vi.fn(() => ({
+  from: vi.fn((table: string) => ({
     insert: vi.fn((payload: Record<string, unknown>) => {
-      insertPayload = payload
+      if (table === 'tickets') insertPayload = payload
       const chain: Record<string, unknown> = {}
       chain.select = vi.fn(() => chain)
       chain.single = vi.fn(() => Promise.resolve({ data: { id: 'tkt-1', ...payload }, error: null }))

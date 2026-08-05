@@ -10,6 +10,7 @@ import {
   X, Play, Pause, ZoomIn, ZoomOut, Maximize2,
   FileText, CheckCircle, ChevronRight, Check, AlertCircle, Loader2,
   Edit3, Copy, Webhook, RefreshCw, Flag, DollarSign, LayoutTemplate, Globe,
+  Ticket, Send,
 } from 'lucide-react'
 
 // AUDIT.md #425 — TriggerType/ActionType (and TRIGGER_TO_DB/ACTION_TO_DB
@@ -27,12 +28,14 @@ type TriggerType =
   | 'proposal_accepted' | 'proposal_declined' | 'invoice_paid'
   | 'renewal_90' | 'renewal_30'
   | 'webhook_received'
+  | 'project_status_changed' | 'project_completed' | 'task_completed'
+  | 'ticket_created' | 'ticket_replied'
 
 type ActionType =
   | 'send_email' | 'send_followup_email'
   | 'update_contact' | 'create_deal' | 'add_tag' | 'remove_tag' | 'rotate_owner'
   | 'create_task' | 'log_activity' | 'send_notification'
-  | 'create_draft_contract' | 'create_billing_task' | 'create_renewal_task'
+  | 'create_draft_contract' | 'create_invoice' | 'send_invoice' | 'create_billing_task' | 'create_renewal_task'
   | 'create_project_record' | 'create_maintenance_record'
   | 'notify_sales_rep' | 'notify_finance_team' | 'notify_delivery_team' | 'notify_assigned_rep'
   | 'log_touchpoint' | 'flag_in_dashboard' | 'update_revenue_metrics'
@@ -60,6 +63,11 @@ const TRIGGER_OPTIONS: { value: TriggerType; label: string; icon: React.ReactNod
   { value: 'renewal_90',         label: 'Renewal Date Within 90 Days', icon: <Clock size={18} />, description: 'When a contract is within 90 days of its renewal date' },
   { value: 'renewal_30',         label: 'Renewal Date Within 30 Days', icon: <Clock size={18} />, description: 'When a contract is within 30 days of its renewal date' },
   { value: 'webhook_received',   label: 'Webhook Received',     icon: <Webhook size={18} />,    description: 'When an external system (Zapier, Stripe, ad platform) POSTs to a URL unique to this automation' },
+  { value: 'project_status_changed', label: 'Project Status Changed', icon: <Briefcase size={18} />, description: 'When a project moves to a new status' },
+  { value: 'project_completed',  label: 'Project Completed',    icon: <CheckCircle size={18} />, description: 'When a project is marked Completed' },
+  { value: 'task_completed',     label: 'Task Completed',       icon: <ListTodo size={18} />,   description: 'When a task is marked Completed' },
+  { value: 'ticket_created',     label: 'Ticket Created',       icon: <Ticket size={18} />,     description: 'When a support ticket is opened (by staff or a client)' },
+  { value: 'ticket_replied',     label: 'Ticket Reply Received', icon: <Ticket size={18} />,    description: 'When a client replies on a support ticket' },
 ]
 
 const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: string; icon: React.ReactNode; description: string }[] }[] = [
@@ -84,6 +92,8 @@ const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: s
     label: 'Contracts & Billing',
     actions: [
       { value: 'create_draft_contract',    label: 'Create Draft Contract',     icon: <FileText size={18} />,     description: 'Create a draft contract record' },
+      { value: 'create_invoice',           label: 'Create Invoice',            icon: <DollarSign size={18} />,   description: 'Create a pending invoice — pulls amount and service from the linked contract when there is one' },
+      { value: 'send_invoice',             label: 'Send Invoice',              icon: <Send size={18} />,         description: "Email an existing invoice to the client's billing contact, with a Stripe payment link when Stripe is connected" },
       { value: 'create_billing_task',      label: 'Create Billing Task',       icon: <ListTodo size={18} />,     description: 'Create a task for the billing/finance team' },
       { value: 'create_renewal_task',      label: 'Create Renewal Task',       icon: <Clock size={18} />,        description: 'Create a task to handle an upcoming renewal' },
       { value: 'create_maintenance_record', label: 'Create Maintenance Record', icon: <RefreshCw size={18} />,   description: 'Create a maintenance record for the account' },
@@ -135,6 +145,11 @@ const TRIGGER_TO_DB: Record<TriggerType, string> = {
   renewal_90:         'Renewal Date Within 90 Days',
   renewal_30:         'Renewal Date Within 30 Days',
   webhook_received:   'Webhook Received',
+  project_status_changed: 'Project Status Changed',
+  project_completed:  'Project Completed',
+  task_completed:     'Task Completed',
+  ticket_created:     'Ticket Created',
+  ticket_replied:     'Ticket Reply Received',
 }
 
 function generateWebhookToken(): string {
@@ -159,6 +174,8 @@ const ACTION_TO_DB: Record<ActionType, string> = {
   log_activity:          'Log Activity',
   send_notification:     'Send Notification',
   create_draft_contract:    'Create Draft Contract',
+  create_invoice:           'Create Invoice',
+  send_invoice:             'Send Invoice',
   create_billing_task:      'Create Billing Task',
   create_renewal_task:      'Create Renewal Task',
   create_project_record:    'Create Project Record',

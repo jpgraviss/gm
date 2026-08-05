@@ -1,0 +1,16 @@
+-- Live-SERP rank tracking (lib/serp-provider.ts).
+--
+-- The rank tracker's only position source was Google Search Console, which
+-- reports its own average-position metric, requires the client's GSC to be
+-- connected, and can't see a keyword with zero impressions at all. It also
+-- made competitor tracking structurally impossible (GSC only reports
+-- properties you own), which is why `competitor_rank_snapshots` was never
+-- written by any code path.
+--
+-- This column stores an optional, encrypted SerpApi key set via
+-- Admin → Integrations. With no key configured the rank tracker falls back
+-- to GSC exactly as before, so this is safe to apply whether or not the
+-- SERP provider is ever paid for.
+--
+-- Matches the existing pattern from add_integration_key_columns.sql.
+ALTER TABLE public.app_settings ADD COLUMN IF NOT EXISTS serpapi jsonb NOT NULL DEFAULT '{}';

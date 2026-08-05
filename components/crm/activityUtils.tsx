@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   PhoneCall, Mail, Video, StickyNote, NotebookPen, CheckSquare,
   TrendingUp, ScrollText, DollarSign, FileText, Clock, Pencil, Check, X,
+  FolderKanban, LifeBuoy,
 } from 'lucide-react'
 import type { ActivityType, CRMActivity } from '@/lib/types'
 
@@ -34,6 +35,12 @@ export const activityConfig: Record<ActivityType, { icon: React.ReactNode; color
   contract:  { icon: <ScrollText size={14} />,   color: '#f97316' },
   invoice:   { icon: <DollarSign size={14} />,   color: '#ef4444' },
   proposal:  { icon: <FileText size={14} />,     color: '#6366f1' },
+  // Added alongside lib/activity-log.ts so Delivery (projects) and Support
+  // (tickets) events render with a real icon instead of crashing the
+  // timeline on an unguarded activityConfig[act.type] lookup (AUDIT #600's
+  // bug class).
+  project:   { icon: <FolderKanban size={14} />, color: '#0891b2' },
+  ticket:    { icon: <LifeBuoy size={14} />,     color: '#db2777' },
 }
 
 export function ActivityTimeline({

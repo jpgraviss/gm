@@ -26,6 +26,7 @@ let sigReqResult: { data: unknown; error: unknown }
 let updateResult: { data: unknown; error: unknown }
 let allSigsResult: { data: unknown[]; error: unknown }
 let contractResult: { data: unknown; error: unknown }
+let contractUpdateResult: { data: unknown; error: unknown }
 let insertedSigReqPayload: Record<string, unknown> | null
 
 const mockDb = {
@@ -61,9 +62,15 @@ const mockDb = {
           chain.single = vi.fn(() => Promise.resolve(contractResult))
           return chain
         }),
-        update: vi.fn(() => ({
-          eq: vi.fn(() => Promise.resolve({ data: null, error: null })),
-        })),
+        update: vi.fn(() => {
+          const chain: Record<string, unknown> = {}
+          chain.eq = vi.fn(() => chain)
+          chain.select = vi.fn(() => chain)
+          chain.maybeSingle = vi.fn(() => Promise.resolve(contractUpdateResult))
+          chain.then = (resolve: (v: unknown) => void, reject?: (e: unknown) => void) =>
+            Promise.resolve({ data: null, error: null }).then(resolve, reject)
+          return chain
+        }),
       }
     }
     return { select: vi.fn(() => ({ eq: vi.fn(() => ({ single: vi.fn(() => Promise.resolve({ data: null, error: null })) })) })) }
@@ -76,7 +83,10 @@ vi.mock('@/lib/supabase', () => ({
 
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }))
 
+vi.mock('@/lib/automations-engine', () => ({ fireAutomations: vi.fn() }))
+
 import { PATCH } from '@/app/api/signatures/[token]/route'
+import { fireAutomations as mockFireAutomations } from '@/lib/automations-engine'
 
 function patchSignature(token: string, body: Record<string, unknown>) {
   const req = new NextRequest(new URL(`http://localhost/api/signatures/${token}`), {
@@ -92,6 +102,7 @@ describe('PATCH /api/signatures/[token] — internal countersignature document_h
     insertedSigReqPayload = null
     mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) })
     contractResult = { data: CONTRACT, error: null }
+    contractUpdateResult = { data: { id: 'contract-1', status: 'Fully Executed', ...CONTRACT }, error: null }
     allSigsResult = { data: [{ type: 'client', status: 'signed' }], error: null }
     updateResult = {
       data: {
@@ -152,5 +163,80 @@ describe('PATCH /api/signatures/[token] — internal countersignature document_h
 
     expect(res.status).toBe(409)
     expect(insertedSigReqPayload).toBeNull()
+  })
+})
+
+// AUDIT #691 — the real e-signature completion flow (this route) never
+// fired the 'contract_executed' automation trigger when both signatures
+// landed, unlike the staff-manual-status-change PATCH route
+// (app/api/contracts/[id]/route.ts). Any automation built on "Contract
+// Fully Executed" silently never ran for a genuinely-signed contract.
+describe('PATCH /api/signatures/[token] — contract_executed automation trigger (#691)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    insertedSigReqPayload = null
+    mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) })
+    contractResult = { data: CONTRACT, error: null }
+    contractUpdateResult = { data: { id: 'contract-1', status: 'Fully Executed', ...CONTRACT }, error: null }
+    updateResult = {
+      data: {
+        id: 'sig-1', contract_id: 'contract-1', token: 'tok-abc',
+        signer_email: 'internal@gravissmarketing.com', signer_name: 'Jonathan Graviss',
+        type: 'internal', status: 'signed', signed_at: '2026-01-15T00:00:00Z',
+        signer_ip: '1.2.3.4', created_at: '2026-01-01T00:00:00Z', expires_at: null,
+      },
+      error: null,
+    }
+  })
+
+  it('fires contract_executed once both signatures are in', async () => {
+    sigReqResult = {
+      data: {
+        id: 'sig-1', token: 'tok-abc', contract_id: 'contract-1',
+        type: 'internal', status: 'pending', signer_email: 'internal@gravissmarketing.com', signer_name: 'Jonathan Graviss',
+        document_hash: computeContractDocumentHash(CONTRACT), expires_at: null,
+      },
+      error: null,
+    }
+    allSigsResult = { data: [{ type: 'client', status: 'signed' }, { type: 'internal', status: 'signed' }], error: null }
+
+    const res = await patchSignature('tok-abc', { signerName: 'Jonathan Graviss', signatureData: 'data:image/png;base64,abc' })
+
+    expect(res.status).toBe(200)
+    expect(mockFireAutomations).toHaveBeenCalledWith('contract_executed', expect.objectContaining({ contractId: 'contract-1', status: 'Fully Executed' }))
+  })
+
+  it('does not fire contract_executed when only one side has signed', async () => {
+    sigReqResult = {
+      data: {
+        id: 'sig-1', token: 'tok-abc', contract_id: 'contract-1',
+        type: 'client', status: 'pending', signer_email: 'jane@acmeco.com', signer_name: 'Jane Client',
+        document_hash: computeContractDocumentHash(CONTRACT), expires_at: null,
+      },
+      error: null,
+    }
+    allSigsResult = { data: [{ type: 'client', status: 'signed' }], error: null }
+
+    await patchSignature('tok-abc', { signerName: 'Jane Client', signatureData: 'data:image/png;base64,abc' })
+
+    expect(mockFireAutomations).not.toHaveBeenCalled()
+  })
+
+  it('does not auto-transition or fire the trigger when the contract was independently Terminated', async () => {
+    sigReqResult = {
+      data: {
+        id: 'sig-1', token: 'tok-abc', contract_id: 'contract-1',
+        type: 'internal', status: 'pending', signer_email: 'internal@gravissmarketing.com', signer_name: 'Jonathan Graviss',
+        document_hash: computeContractDocumentHash(CONTRACT), expires_at: null,
+      },
+      error: null,
+    }
+    contractResult = { data: { ...CONTRACT, status: 'Terminated' }, error: null }
+    allSigsResult = { data: [{ type: 'client', status: 'signed' }, { type: 'internal', status: 'signed' }], error: null }
+
+    const res = await patchSignature('tok-abc', { signerName: 'Jonathan Graviss', signatureData: 'data:image/png;base64,abc' })
+
+    expect(res.status).toBe(200)
+    expect(mockFireAutomations).not.toHaveBeenCalled()
   })
 })

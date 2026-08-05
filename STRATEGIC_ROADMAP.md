@@ -1,262 +1,113 @@
-# GravHub — Strategic Roadmap & Competitive Audit
-**Date:** April 2026
-**Goal:** Complete GravHub into a robust platform, competitive with HubSpot and GoHighLevel, ready to scale and resell as SaaS to other marketing agencies.
+# GravHub — Strategic Roadmap
+**Last updated: August 5, 2026**
+**Goal: finish GravHub as Graviss Marketing's own internal agency-management system.** This is not a resellable SaaS product — see "Retired direction" below.
+
+Companion doc: `DEVELOPMENT_PLAN.md` has the full current-state assessment this roadmap is built from. `AUDIT.md` remains the bug/security findings tracker — this document is the feature/architecture roadmap.
 
 ---
 
-## 1. Current State Assessment
+## Retired direction
 
-### Functional completeness: ~60%
+The prior version of this document (April 2026) was framed around competing with HubSpot/GoHighLevel and building GravHub into a multi-tenant SaaS product to resell to other agencies. **That direction is retired.** Confirmed with the user (2026-08-05): GravHub's purpose is to run Graviss Marketing's own agency operations, permanently single-tenant. This means, explicitly, none of the following are on this roadmap anymore:
 
-| Module | Score | Notes |
+- Multi-tenancy migration (`tenant_id`, workspaces, per-tenant RLS)
+- Signup/invite flow for external agencies, subdomain/custom-domain-per-tenant routing
+- Per-tenant Stripe subscription billing, usage quotas, white-labeling
+- Feature-count parity chasing (voice AI receptionist, communities, affiliate manager, 1000+ templates, mobile apps, etc.) — build these only if Graviss's own team would actually use them, never for competitive optics
+
+Everything below is scoped to: **make this the best possible internal tool for one agency's real day-to-day work.**
+
+---
+
+## Phase 0 — Data-safety guardrails
+*Do this first. Real client contracts, invoices, and financial data for ~30 real clients are already live in this system.*
+
+| # | Item | Why now |
 |---|---|---|
-| CRM (companies, contacts, deals) | 65% | Usable. Weak on AI insights, bulk ops, search, import. |
-| Sales (proposals, contracts) | 70% | Full lifecycle works. Missing templates, counter-proposals, redlines. |
-| Billing (invoices) | 100% | Native invoicing. No payment collection yet (Stripe planned). |
-| Projects | 75% | Kanban works. No Gantt, budgets, or file attachments. |
-| Communication (inbox, calendar, sequences, tickets) | 85% | Sequences execute with full delivery tracking (open/click/bounce/unsubscribe). Ticket routing rules implemented. No SMS yet. |
-| Client Portal | 55% | Basic visibility. No approvals, chat, payments, file uploads. |
-| Reporting | 65% | Built-in charts. No custom report builder or forecasting. |
-| Automation engine | 95% | 28 actions implemented: email, task, deal, contract, project, notification, tags, field updates, sequences, flow control. |
-| Admin & permissions | 90% | API middleware auth gate + RBAC enforcement on critical routes (export, bulk-delete, merge, import, storage, push, invites). |
-
-### Critical production blockers (must fix before selling)
-
-1. ~~QuickBooks sync~~ — Removed. Native invoicing in place.
-2. ~~Automation actions are no-ops~~ — All 28 actions implemented and functional.
-3. ~~RBAC not enforced~~ — Middleware auth + requireRole guards on critical routes.
-4. ~~No payment processing~~ — Stripe Checkout integration shipped (B1): "Pay Now"/"Copy Payment Link" on invoices, webhook-driven paid-status updates.
-5. ~~No real ticket routing rules~~ — Routing rules implemented (priority escalation, company rep matching, service-type unit assignment).
-6. ~~Sequences lack tracking~~ — Full delivery tracking: open/click/bounce/unsubscribe via Resend webhooks.
-7. ~~Dashboard queries load full tables~~ — All growing-table endpoints now cursor-paginated (100/page default) with frontend pages following the cursor to completion instead of truncating.
+| 0.1 | **Verify and document the actual backup/disaster-recovery story.** Confirm whether Supabase Point-in-Time Recovery is enabled on the production project and at what retention window; write a one-page restore runbook. The only current backup is a manual, one-way admin JSON export with no restore path. | No verified DR path for the business's real financial/contract data today |
+| 0.2 | **Confirm `NEXT_PUBLIC_SENTRY_DSN`/`SENTRY_AUTH_TOKEN` are actually set in the production Vercel environment.** The code is fully built and correctly redacts PII — this is a one-time config checklist item, not engineering work. Until confirmed, every unhandled error across all 298 API routes is invisible with no alerting. | False sense of security if the team believes error monitoring is "on" when it may be silently no-op'd |
+| 0.3 | **Add test coverage to `app/api/cron/route.ts`.** Zero tests exist today despite this being the single highest-blast-radius file in the app — 12 chained jobs (sequence emails, uptime alerting, rank tracking, scheduled broadcasts, review campaigns, recurring task spawning) that fail silently (try/catch-per-job, log-only) with nothing to catch a regression before it reaches production. | A silent regression here could break sequence sends, uptime alerting, and billing reminders simultaneously with no one noticing until a client does |
+| 0.4 | **Formalize migration ordering.** 144 of 145 files in `supabase/migrations/` don't follow the standard timestamp-prefixed naming convention, so there's no enforced apply order and no CI check that `schema.sql` matches what's actually live. Doesn't need a full CLI-migration rebuild — at minimum, adopt timestamp prefixes going forward and add a lightweight CI check that flags drift. | Real risk of an un-rebuildable database and silent schema drift as the migration backlog keeps growing |
 
 ---
 
-## 2. Competitive Gap Analysis
+## Phase 1 — Connect the modules
+*The user's explicit directive: "All of the features and services need to be connected to each other." This is the single highest-value phase — the app is already feature-rich; it needs to behave like one system.*
 
-### What HubSpot has that we don't
-- Custom objects and unlimited custom properties
-- AI-powered lead scoring and predictive insights
-- Email marketing (bulk sends, templates, A/B testing)
-- Landing page builder
-- Forms with progressive profiling
-- Ads management (Google, Facebook, LinkedIn)
-- Live chat and chatbots
-- Knowledge base and customer portal
-- Custom report builder with attribution
-- Content CMS with blog, SEO, AI-assisted content
-- Sandbox environments
-- ~1,900+ app marketplace
-- Mobile apps (iOS/Android)
-- Playbooks and snippets libraries
-- Multi-language content
-- Call recording with AI transcription
-
-### What GoHighLevel has that we don't (and is MORE critical for agency SaaS)
-- **SaaS Mode + rebilling** — the single feature that defines this category
-- **Unlimited sub-accounts** — one platform, many agency clients
-- **Snapshots** — clone a full workspace template across clients
-- **Unified conversations inbox** — SMS, email, FB, IG, WhatsApp, Google chat, TikTok in one view
-- **Voice AI receptionist** — inbound calls answered by AI, books appointments
-- **Funnels & websites builder** — no-code, drag-drop
-- **Membership sites and courses**
-- **Reputation management** — automated review requests, AI responses
-- **Communities** (group discussions)
-- **Affiliate manager**
-- **Social media scheduler** (7 platforms)
-- **Missed-call text-back automation**
-- **Text-to-Pay**
-- **Multiple calendar types** (round-robin, class/group, service calendars)
-- **Twilio + Mailgun integration for SMS/email sending**
-- **A2P 10DLC registration workflow**
-- **Custom domains per tenant** (app.youragency.com)
-- **White-labeled mobile app** (iOS/Android with tenant branding)
-- **Wallet system + auto-recharge** for rebilling
-- **1000+ industry templates** and 1000+ marketplace apps
-- **Smart lists** (dynamic contact segments that auto-update)
-- **AI Employee suite** (Conversation AI, Voice AI, Reviews AI, Content AI, Workflow AI)
-
-### What we have that they don't (our edge)
-- Purpose-built for marketing agency operations (proposal → contract → project → billing → renewal as a coherent flow)
-- Structured addendum workflow with typed change fields
-- Tight integration with Google Workspace (Gmail, Calendar, Drive)
-- AI chat assistant with CRM tool-calling
-- Cleaner, more modern UI
-
----
-
-## 3. Prioritized Roadmap to Competitive Parity
-
-### PHASE A — Fix what's broken (3 weeks)
-Must-do before anything else. These are things we claim to have but don't actually work.
-
-| # | Item | Effort |
+| # | Item | Detail |
 |---|---|---|
-| A1 | ~~Wire all automation actions~~ — **DONE.** 28 actions implemented. | ✅ |
-| A2 | ~~QuickBooks sync~~ — **DONE.** Removed QB, native invoicing in place. | ✅ |
-| A3 | ~~Enforce RBAC in API routes~~ — **DONE.** Middleware auth + requireRole on critical routes. | ✅ |
-| A4 | ~~Sequence tracking~~ — **DONE.** Full delivery tracking via Resend webhooks. | ✅ |
-| A5 | ~~Dashboard pagination~~ — **DONE.** All growing-table list endpoints (`crm_activities`, sequence enrollments, tracked keywords, reviews, tasks/tickets/projects/proposals, contracts) now cursor-paginated + frontend follows to completion via `fetchAllPages()`. | ✅ |
-| A6 | ~~Ticket routing rules~~ — **DONE.** Priority escalation + company rep + service-type routing. | ✅ |
-| A7 | ~~Contract template builder UI~~ — **DONE.** Full CRUD at `/admin/document-templates`, wired into Sidebar + Cmd+K. | ✅ |
+| 1.1 | **Build a real "Create Invoice" automation action.** None exists today — `lib/automations-engine.ts` has no invoice-creation action type at all, so not even a hand-built automation can generate one. This unblocks recurring billing (Phase 3) and lets `Contract Fully Executed`/`Contract Sent` optionally spin up a first invoice automatically. |
+| 1.2 | **Fix the Company Panel to use `company_id`, not company name, for Deals/Contracts/Invoices** (Contacts/Activity tabs already do this correctly — extend the same pattern). Add Invoices, Proposals, Tickets, and Projects as real tabs — today a company's invoices/tickets/projects are only small side-widgets, and proposals can be created from the panel but never viewed there. |
+| 1.3 | **Fix the proposal-acceptance asymmetry.** The real path clients use — clicking Accept in the emailed link (`/api/proposals/view/[token]`) — only fires an automation trigger; a contract is created *only if* staff separately built a matching automation. The rarely-used internal "Mark Accepted" button auto-creates a contract directly. Ship a default seeded automation (or make the direct-creation behavior the default for both paths) so a real client acceptance always flows forward the same way. |
+| 1.4 | **Give Delivery/Operations and Client Support real automation triggers.** Today neither module can trigger or be triggered by anything — `project_launched` exists in the trigger map but is dead code with zero real callers, and there's no ticket-created/replied trigger at all. Add real triggers for at minimum: project status change, task completion, ticket created, ticket replied. |
+| 1.5 | **Make `crm_activities` genuinely unified.** Finance (invoice created/paid), Operations (project status change), and Support (ticket created/replied) currently never write to it directly — the company Activity tab is really just an email+proposal log. Add direct activity-log writes from those three modules so it lives up to its name. |
+| 1.6 | **Expand the main dashboard (`app/page.tsx`) to include Projects, Tickets, Proposals, and Marketing.** Today it only queries deals/invoices/contracts/renewals — a company could have every ticket escalating and every project stalled and the exec dashboard would show nothing. The broader picture already exists across ~6 separate `/reports` sub-pages; at minimum, surface high-signal counts from those on the home dashboard too. |
+| 1.7 | **Reconcile Mercury bank transactions against invoices.** Currently a fully disconnected read-only widget — no matching logic exists between a real bank transaction and an outstanding invoice, unlike the fully-wired Stripe path. Lower priority than 1.1–1.6, but a real ongoing manual-matching cost otherwise. |
 
-### PHASE B — Core agency features we're missing (4 weeks)
-Core features every agency CRM has that we don't.
+---
 
-| # | Item | Effort |
+## Phase 2 — Close client-facing embarrassment risks
+*Two things a real Graviss Marketing client can hit today that would look outright broken, not just incomplete.*
+
+| # | Item | AUDIT.md ref |
 |---|---|---|
-| B1 | ~~Stripe integration for client invoicing~~ — Checkout Session payment link + webhook, DONE. Card-on-file/auto-collect not built (Checkout is one-time payment per invoice, not a saved payment method) | 4 days |
-| B2 | ~~Custom fields on contacts, companies, deals~~ — field-definition library (`/admin/custom-fields`) + jsonb storage, wired into display and edit views for all three entities, DONE. Edit-only for v1 (not on the create panels) | 4 days |
-| B3 | ~~Smart lists~~ — saved filter criteria per list (contacts/companies/deals), re-applied against live data on click, DONE | 3 days |
-| B4 | ~~Bulk operations~~ — bulk tag, bulk reassign, bulk delete on CRM lists DONE (contacts/companies/deals). Bulk email still missing (needs a send-path decision) | 3 days |
-| B5 | ~~Email marketing builder~~ — real block-based drag-drop editor (`EmailBlockEditor`, react-beautiful-dnd), templates, 15-field audience filtering, A/B subject testing with winner tracking, real Resend sends. DONE (this roadmap entry was stale — already built) | 6 days |
-| B6 | ~~Forms builder~~ — 14 field types incl. conditional logic + multi-step, real CRM/webhook/notification/confirmation wiring, embeddable iframe snippet. DONE (stale entry — already built) | 4 days |
-| B7 | ~~Landing pages~~ — real block-based page builder (`app/funnels/editor`). DONE: quick-create drops straight into the editor on the auto-created first page; page reorder (funnels list) and block reorder (editor) are real drag-drop (`@hello-pangea/dnd`) instead of up/down buttons; pages are inline-renamable from the list, not just in the editor; single-page funnels render as a plain "Landing Page" (no "Step 1"/pipeline chrome) instead of looking like an unfinished funnel; editor has a page switcher so multi-page funnels don't require bouncing back to the list between pages. Custom domains still not built — needs a hosting/DNS decision, out of scope for this pass | 6 days |
-| B8 | **SMS channel** — Twilio integration, bulk SMS, 2-way in unified inbox. Confirmed 100% missing (zero references anywhere in the codebase) — needs a Twilio account decision before building, not something to start unilaterally | 4 days |
-| B9 | ~~Unified inbox~~ — merges tickets/sequences/broadcasts/CRM-activities/Gmail into one contact-keyed view. DONE. SMS merging blocked on B8 | 5 days |
-
-### PHASE C — SaaS readiness for reselling (8 weeks)
-This is the big one. Required before you can sell to another agency.
-
-| # | Item | Effort |
-|---|---|---|
-| C1 | **Multi-tenancy migration** — add `tenant_id` to every table, rewrite RLS policies, add `workspaces` + `workspace_members` tables, inject tenant context into every query | 10 days |
-| C2 | **Signup + invite flow** — public registration, workspace creation, email invites, JWT tenant claims | 5 days |
-| C3 | **Subdomain routing** — `*.gravhub.com` resolves to tenant workspace via subdomain → workspace lookup | 3 days |
-| C4 | **Custom domains per tenant** — `app.youragency.com` → Vercel domain attach API | 3 days |
-| C5 | **Stripe subscription billing (for tenants)** — plan tiers, usage tracking, quota enforcement, webhook handling | 6 days |
-| C6 | **Full white-label** — logo upload, favicon, email sender domain, brand colors, "Powered by" removal | 4 days |
-| C7 | **Per-tenant rate limiting** — switch from IP-based to tenant-based in `proxy.ts` | 1 day |
-| C8 | **Per-tenant encryption keys** — envelope encryption for OAuth tokens, derive per-tenant keys from master | 3 days |
-| C9 | **Usage dashboard + quotas** — contacts/deals/API calls/storage tracked per tenant, enforced at write-time | 3 days |
-| C10 | **Snapshots** — clone a workspace template to a new tenant (copy pipelines, sequences, templates) | 5 days |
-| C11 | **Observability** — structured logging (pino), APM instrumentation, uptime monitoring, per-tenant dashboards | 3 days |
-
-### PHASE D — HubSpot/GHL parity (6 weeks)
-After we can sell, these close the gap with the big players.
-
-| # | Item | Effort |
-|---|---|---|
-| D1 | **Advanced workflow engine** — if/else branching (done), generic webhook-trigger intake (done), wait-until-condition, goal events, custom code action. `lib/automations-engine.ts` has real Wait/Resume, a working If/Else with 5 operators, and now a `Webhook Received` trigger — each automation gets its own random-token URL (generated in the builder, shown/copied/regenerated from the trigger's config panel), matched via the same "broadcast by trigger label, narrow by per-automation config" pattern `deal_stage_changed`/`invoice_overdue` already use, with `_publicSource: true` so ownership-changing actions still refuse to run from it. Remaining gap: Wait is still fixed-duration only (no condition-based wait — deliberately not touched, since redesigning the resume mechanism risks the atomic-claim correctness work already hardened this session), no goal-event trigger type (too vague to build without a product definition), and no custom-code action (arbitrary server-side code execution — a real security/sandboxing decision, not something to build unilaterally) | 5 days |
-| D2 | ~~AI lead scoring~~ — `lib/ai/lead-scoring.ts`'s `scoreContact()` (real LLM call + weighted engagement/deal/activity score), wired end-to-end from `app/crm/contacts/page.tsx`. DONE — this roadmap entry was stale, already built | 4 days |
-| D3 | **Custom report builder** — user-defined dimensions/metrics, save, schedule, email. Confirmed not built — only a dead `'custom_reports'` feature-flag string exists, no UI/API/schema | 6 days |
-| D4 | ~~Attribution reporting~~ — source → deal → revenue tracking, UTM capture. DONE: `crm_contacts` now captures first-touch UTM params (source/medium/campaign/term/content + landing URL) at contact-creation time from both public funnels and the standalone Forms product; deals join through `contact_id` (also fixed `lib/automations-engine.ts`'s `Create Deal` action, which previously never set `contact_id`, silently breaking the join for every automation-created deal); new `/reports/attribution` page + `/api/reports/attribution` aggregation. Existing contacts predating this fix and manually-created/HubSpot-imported deals honestly show as "unattributed," not guessed at. GravIntel's separate visitor-tracking UTM capture (`gi_visitors`) was NOT wired to this — it's a different, pre-conversion signal (anonymous visits) vs. this feature's post-conversion signal (named contacts/deals); linking the two remains a future enhancement, not required for this to be useful today | 3 days |
-| D5 | ~~Reputation management~~ — GBP integration, auto review request after invoice paid, public `/go/review/[token]` flow. DONE — this roadmap entry was stale, already built | 3 days |
-| D6 | ~~Social media scheduler~~ — 6 real platform integrations (FB/IG/LinkedIn/X/GBP), scheduled dispatch cron. DONE — this roadmap entry was stale, already built | 5 days |
-| D7 | **Client portal 2.0** — approvals, comments, file upload, payment button, progress view. Already fully built (`app/portal/**`: approvals, e-sign, billing, projects, SEO, services, tickets, delivery workflow timeline, help center — all correctly `requirePortalClient`-gated). The gap is reachability, not engineering: `AppShell.tsx` routes every real client session to a smaller single-page `/client` dashboard instead, so `/portal` is dead weight in practice (AUDIT #154). **Needs a product decision**: is `/client` the intentional replacement (trim/remove `/portal`), or should real clients be reconnected to the richer `/portal` build? | 5 days |
-| D8 | ~~Knowledge base~~ — CRUD + portal-scoped visibility. DONE — this roadmap entry was stale, already built | 3 days |
-| D9 | ~~Live chat widget~~ — embeddable widget (real LLM call, `public/chatbot.js` → `app/api/chatbots/[id]/chat`) was already built; DONE now that conversations with a captured visitor email also surface as a read-only source in the Unified Inbox (`app/api/inbox/unified/route.ts`) — there's no staff-reply path for chat, so this is visibility only, not a reply channel | 4 days |
-| D10 | **Public API + webhooks** — REST API for external integrations, OAuth 2.0, rate limiting. Confirmed not built — no outward-facing API/key issuance exists for third parties (the WordPress plugin's static `X-GravHub-Key` and this session's `lib/extension-auth.ts` Bearer-token pattern are the closest prior art but both are single-purpose, not general-purpose). If pursued, `extension-auth.ts`'s hashed-token pattern is the best existing scaffold to generalize | 4 days |
-| D11 | **Mobile apps** — React Native or Expo shell for iOS/Android (CRM, inbox, pipeline, notifications) | 10 days |
-
-### PHASE E — AI & next-gen features (4 weeks)
-These are the things that make people pick GHL over HubSpot today.
-
-| # | Item | Effort |
-|---|---|---|
-| E1 | **Voice AI receptionist** — Twilio + Claude: inbound call, transcription, intent detection, calendar booking | 6 days |
-| E2 | **Conversation AI** — auto-reply to SMS/chat/FB/IG with tool-calling to CRM | 4 days |
-| E3 | **Content AI** — blog post / email / social post generation using Claude | 3 days |
-| E4 | **AI Biz card scanner** — upload photo → extract contact fields via Claude vision | 2 days |
-| E5 | **AI workflow action** — run Claude prompt as a step in automation with merge fields | 2 days |
-| E6 | **Smart suggestions** — "This deal hasn't moved in 14 days, suggest action" via AI insights panel | 3 days |
+| 2.1 | **Build real client self-enrollment for Sales Training**, or bulk-enroll clients automatically when their company gets the Sales Training entitlement. Today a client not manually pre-enrolled course-by-course gets a raw, unexplained error trying to complete a quiz. | #710 (Open, High) |
+| 2.2 | **Fix the Delivery Timeline's per-step detail panel.** `mapWorkflow()` never populates the `details`/deliverables fields the client-facing UI expects — every client who expands a step sees nothing, including deliverables staff believe they've already shared. This is the kind of gap that reads as "broken" rather than "missing" to a client. | #693 (Open, High) |
+| 2.3 | **Wire chatbot-captured leads into the CRM.** A prospect can chat with the widget, give their name/email, and that lead sits only in the chatbot's own conversation list today — no automatic (or even a manual "Convert to Lead") path into `crm_contacts`. Straightforward given the automation engine already exists. | — |
+| 2.4 | **Backfill integrations for the freshly-imported 30 real clients** (GSC/GA4/reputation/rank tracking) so the client portal's Insights tab isn't a blank state for most of them on first login. This is a data-entry/rollout task, not a code fix — flagging here so it's tracked as part of "finishing" the product experience. | — |
 
 ---
 
-## 4. Implementation Timeline
+## Phase 3 — Recurring billing automation
+*The single largest daily-operations gap found in Finance & Billing: nothing keeps invoices flowing from active retainer contracts without manual work every period.*
 
-| Phase | Duration | Cumulative | What you get |
-|---|---|---|---|
-| **A** | 3 weeks | Week 3 | Production-ready for internal use |
-| **B** | 4 weeks | Week 7 | Competitive with HubSpot Starter / GHL Starter |
-| **C** | 8 weeks | Week 15 | Can sell to other agencies as SaaS |
-| **D** | 6 weeks | Week 21 | Parity with HubSpot Pro / GHL Pro |
-| **E** | 4 weeks | Week 25 | Market-leading AI features |
-
-**Total: ~25 weeks (6 months) to be a credible HubSpot/GHL competitor.**
-
----
-
-## 5. Recommended Execution Order
-
-### Track 1 — Ship fixes immediately (weeks 1-3)
-Phase A in full. After week 3, the platform is solid for your own agency to use day-to-day.
-
-### Track 2 — Revenue-driving features (weeks 4-7)
-Phase B. Adds the things clients will pay more for (email marketing, forms, landing pages, SMS).
-
-### Track 3 — SaaS foundation (weeks 8-15)
-Phase C. This is the big investment. If you're not 100% committed to reselling, skip this entirely and stay single-tenant.
-
-### Track 4 — Competitive parity (weeks 16-25)
-Phases D + E in parallel. Ship AI features alongside reporting and mobile to be a credible alternative.
-
----
-
-## 6. Critical Architectural Decisions Needed
-
-Before starting Phase C, you need to commit to answers for these:
-
-1. **Multi-tenancy model:** schema-based (one Postgres per tenant) vs row-based (`tenant_id` column). **Recommendation:** row-based for simplicity, migrate to schema-based at 100+ tenants.
-
-2. **Hosting model:** Vercel-only, or offer self-hosted Docker? **Recommendation:** Vercel-only until $1M ARR, then add self-hosted for enterprise.
-
-3. **Sending infrastructure:** Resend (current) handles transactional well but bulk email at scale needs Mailgun/SendGrid. **Recommendation:** Keep Resend for transactional, add Mailgun for marketing broadcasts.
-
-4. **Voice/SMS:** Twilio (flexible, expensive) vs LeadConnector/LC Phone (cheaper, less control). **Recommendation:** Twilio for flexibility.
-
-5. **Pricing model:** Per-user seat, per-contact, or flat rate with tier limits? **Recommendation:** Flat tier with limits (Starter $99, Pro $299, Agency $999) + usage overage.
-
-6. **Which features to build in-house vs embed:** Landing page builder is 6 days in-house or free via Unicorn Platform / Carrd white-label. **Recommendation:** Buy first, build second.
-
----
-
-## 7. What to Cut / Not Build
-
-To stay focused, these should NOT be priorities:
-
-- ❌ Full Webflow-level page builder (too much work, low ROI)
-- ❌ Knowledge base with multi-language (nice but not revenue-driving)
-- ❌ Podcast hosting (outside scope)
-- ❌ Ads management (complex, regulated — partner instead)
-- ❌ On-prem self-hosted (until $1M+ ARR)
-- ❌ Communities/forums (scope creep)
-- ❌ Affiliate manager (until you have 50+ paying tenants)
-
----
-
-## 8. Budget & Resources
-
-This roadmap assumes **one senior full-stack engineer working full-time** (or two engineers at 50% utilization). At that pace:
-
-- Phase A+B (7 weeks): Core platform done — you can use it
-- Phase C (8 weeks): SaaS-ready — you can start selling
-- Phase D+E (10 weeks): Competitive — you can charge premium pricing
-
-**At one engineer, total time to full roadmap: ~25 weeks / 6 months.**
-**At two engineers: ~13 weeks / 3 months.**
-**With Claude Code acceleration: probably 40-50% faster on well-scoped tasks.**
-
----
-
-## 9. Recommended Next Actions
-
-1. **This week:** Execute Phase A completely. Lock down the broken pieces.
-2. **Next week:** Decision meeting on Phase C commitment (SaaS or stay internal).
-3. **Week 3:** Kick off Phase B based on that decision.
-4. **Week 7:** Internal launch to your own agency — dogfood everything.
-5. **Week 15:** Beta test SaaS with 3 friendly agencies (free for 3 months).
-6. **Week 25:** Public launch.
-
----
-
-## Appendix: Feature count comparison
-
-| Platform | Feature count |
+| # | Item |
 |---|---|
-| HubSpot (all hubs) | ~130+ core features |
-| GoHighLevel | ~181 features |
-| GravHub (current) | ~85 functional features |
-| GravHub (after Phase A) | ~100 |
-| GravHub (after Phase B) | ~135 |
-| GravHub (after Phase D+E) | ~200+ |
+| 3.1 | Build a cron job (alongside the existing `app/api/cron/route.ts` jobs) that generates a real invoice automatically for each active recurring `Contract` on its billing cadence, using the new "Create Invoice" action from Phase 1.1. |
+| 3.2 | Same for `maintenance_records` — cancellation-fee invoicing already auto-generates correctly (AUDIT #467); regular month-to-month retainer billing off `nextBillingDate` still doesn't. |
+| 3.3 | **Needs a decision, not a build**: does Graviss need real tax handling on invoices (sales tax field/rate/calculation)? Nothing exists today. Flag to the user before building — depends on real business/compliance requirements this document can't answer. |
+| 3.4 | **Needs a decision**: is a real, numbered, line-itemized, tax-aware invoice PDF needed (vs. today's ad hoc "receipt" popup after payment)? Would also need a new document-template type (`TEMPLATE_TYPES` currently only supports proposal/contract/addendum). |
+
+---
+
+## Phase 4 — Marketing channel completion
+*Mostly business-process steps, not engineering — flagged here so they're tracked as part of "finished," not lost.*
+
+| # | Item | Type |
+|---|---|---|
+| 4.1 | Complete Facebook, Instagram, and LinkedIn app review. The publishing code for all three is already fully built and correct — they're gated behind each platform's own review process, not a missing feature. Google Business Profile already publishes live today. | Business process |
+| 4.2 | **Needs a decision**: pay for a real SERP data source (e.g. DataForSEO, SerpApi) for the rank tracker. Today positions are GSC-derived only (different methodology than a true rank checker, requires the client's GSC connected, can't track a brand-new zero-traffic keyword), and the Competitors tab is permanently empty — `competitor_rank_snapshots` is never written by any code path. | Cost decision |
+| 4.3 | **Needs a decision**: custom/branded domain support for the funnel/landing-page builder. Pages currently only live under GravHub's own app domain — fine for gated internal use, a real limitation if these are meant as public campaign pages for clients or for Graviss's own marketing. | Infra decision |
+
+---
+
+## Phase 5 — Polish & completeness
+*Real, traced gaps that don't block daily work today but are worth closing as capacity allows. Roughly ordered by impact.*
+
+| # | Item | AUDIT.md ref |
+|---|---|---|
+| 5.1 | Pipeline/forecast totals should separate one-time from recurring line-item value — as retainer deals get built with the new line-items editor, "Pipeline Value"/"Weighted Value" will otherwise overstate real cash flow. | — |
+| 5.2 | Fix Revenue-by-Service reporting to split a multi-service deal's value across its real line items instead of attributing 100% to one service. | #719 (Open) |
+| 5.3 | Fix the renewal-quoting sidebar's monthly/total math — can inflate a quoted renewal price by up to 36x when no linked `Contract` record exists (the common case, since `LogRenewalModal` never links one). | #707 (Open) |
+| 5.4 | Add a manual ticket-reassignment control to the ticket detail panel — today assignment is set once at auto-routing and effectively frozen. | — |
+| 5.5 | Add a real shared, multi-staff team calendar view — today each staff member only sees their own schedule. | — |
+| 5.6 | `NewProposalPanel` needs a real company picker (`CompanySelect`), not a free-text field. | #721 (Open) |
+| 5.7 | Add ownership scoping to saved filters/smart lists so one Team Member can't delete another's. | #688 (Needs Decision) |
+| 5.8 | Resolve the Gmail-connect privacy-disclosure gap — staff aren't told connecting turns unread personal mail into org-visible tickets. | #647 (Needs Decision) |
+| 5.9 | Resolve the OAuth 180-day re-auth policy inconsistency — Calendar/Drive/Gmail never actually get forced re-auth despite the code's own doc comment claiming they do. | #656 (Needs Decision) |
+| 5.10 | Redis/Upstash-backed rate limiting to replace the current in-memory limiter (won't survive Vercel's multi-instance model) — lower urgency for a trusted internal team, but a real defense-in-depth gap. | — |
+| 5.11 | Deeper project management (drag-drop status changes, budget/hours-estimate tracking, dependency/critical-path view) — explicitly optional; today's list/board/milestone view is functional, this would be a real upgrade, not a fix. | — |
+| 5.12 | Make the delivery workflow repeatable per client (today it's a single fixed 8-step instance per client — can't run a second one for a repeat/second engagement without a schema change). | #693-adjacent |
+
+---
+
+## Recommended execution order
+
+1. **Phase 0** — non-negotiable, do before anything else touches production data further.
+2. **Phase 1** — the highest-leverage phase; directly answers "make the features connect to each other." Item 1.1 (Create Invoice action) also unblocks Phase 3.
+3. **Phase 2** — quick, high-visibility fixes given real clients are already using the portal.
+4. **Phase 3** — once 1.1 lands, the recurring-billing cron is a natural next step; items 3.3/3.4 need the user's input first.
+5. **Phase 4** — mostly waiting on business-process/cost decisions, not blocked on other engineering work; can run in parallel with anything else.
+6. **Phase 5** — ongoing polish, pick up opportunistically or in a dedicated pass once 0–3 are done.
+
+Every `Needs Decision` item above will be raised via a direct question before being built, per this repo's established convention — none will be built unilaterally.

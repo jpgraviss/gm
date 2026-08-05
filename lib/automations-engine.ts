@@ -4,7 +4,9 @@ import { sendPushNotification } from '@/lib/push-notifications'
 import { wrapBrandedEmail } from '@/lib/email-template'
 import { getSettings } from '@/lib/settings'
 import { shouldSendPushForEvent } from '@/lib/notification-preferences'
-import { contractMonthlyValue } from '@/lib/metrics'
+import { contractMonthlyValue, computeMRR } from '@/lib/metrics'
+import { contractPeriodAmount, isRecurringStructure } from '@/lib/recurring-billing'
+import { sendInvoiceEmail } from '@/lib/invoice-send'
 import { getFirstPipelineStageName } from '@/lib/pipelines'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -17,6 +19,15 @@ const TRIGGER_MAP: Record<string, string> = {
   'invoice_paid':         'Invoice Paid',
   'invoice_overdue':      'Invoice Overdue',
   'project_launched':     'Project Status = Launched',
+  // Delivery/Operations and Client Support previously had NO usable triggers
+  // at all — 'project_launched' existed here but was only ever fired by a
+  // dead endpoint with zero callers, so an entire half of the business was
+  // invisible to the automation engine in both directions.
+  'project_status_changed': 'Project Status Changed',
+  'project_completed':    'Project Completed',
+  'task_completed':       'Task Completed',
+  'ticket_created':       'Ticket Created',
+  'ticket_replied':       'Ticket Reply Received',
   'deal_stage_changed':   'Deal Stage Changed',
   'contact_created':      'Contact Created',
   'form_submitted':       'Form Submitted',
@@ -92,6 +103,7 @@ const ACTION_CONFIG_ADAPTERS: Record<string, (cfg: Record<string, unknown>) => R
   // AUDIT.md #524 — previously had no adapter at all, so the builder's
   // config had nowhere real to go even after a template picker was added.
   'Apply Service Template': (cfg) => ({ templateId: cfg.templateId }),
+  'Create Invoice': (cfg) => ({ invoiceAmount: cfg.amount, invoiceServiceType: cfg.serviceType, invoiceDueDays: cfg.dueDays }),
 }
 
 function translateActionConfig(actionType: string, cfg: Record<string, unknown>): Record<string, unknown> {
@@ -720,6 +732,13 @@ async function executeAction(
         id: `c-auto-${uid()}`,
         proposal_id: (context.proposalId as string) ?? null,
         company,
+        // Was missing on this and the 4 sibling "legacy" actions below —
+        // 7 other action handlers in this same file already resolve it
+        // this way; without it, an auto-created contract/task/project/
+        // maintenance record is invisible on the originating company's own
+        // detail-page tabs and any ?companyId=-filtered view (same bug
+        // class as AUDIT #226/#598/#634, just missed for this set).
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         status: 'Draft',
         value: (context.value as number) ?? 0,
         billing_structure: 'Monthly',
@@ -741,6 +760,8 @@ async function executeAction(
         category: action === 'Create Billing Task' ? 'Billing' : 'Renewal',
         status: 'Pending',
         priority: 'High',
+        company,
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         assigned_to: (context.assigned_rep as string) ?? '',
         due_date: today,
         created_date: today,
@@ -752,6 +773,7 @@ async function executeAction(
       await db.from('projects').insert({
         id: `proj-auto-${uid()}`,
         company,
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         service_type: (context.service_type as string) ?? 'General',
         status: 'Not Started',
         progress: 0,
@@ -765,10 +787,119 @@ async function executeAction(
       await db.from('maintenance_records').insert({
         id: `maint-auto-${uid()}`,
         company,
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         service_type: (context.service_type as string) ?? 'General',
         status: 'Active',
         contract_id: (context.contractId as string) ?? null,
       })
+      break
+    }
+
+    // Previously there was NO invoice-creation action of any kind, so even a
+    // fully hand-built automation could not generate an invoice — the single
+    // biggest cross-module wiring gap in the app (Contract → Invoice had no
+    // path at all, and all three real invoice-creation call sites left
+    // `contract_id` null). This closes that, and is what the recurring
+    // retainer-billing cron builds on.
+    case 'Create Invoice': {
+      const invCompanyId = (context.companyId as string) ?? (context.company_id as string) ?? null
+      const contractId = (context.contractId as string) ?? (context.contract_id as string) ?? null
+
+      // Prefer the contract as the source of truth for amount/service when
+      // this fires off a contract trigger — the whole point is that staff
+      // shouldn't re-key what the contract already says.
+      //
+      // Deliberately does NOT fall back to `context.value`. `executeWorkflow`
+      // spreads the whole trigger row over the config (see the
+      // ACTION_CONFIG_ADAPTERS note above), and deals, contracts, proposals
+      // and renewals all carry a `value` column — so a "Deal Stage Changed →
+      // Create Invoice" automation on an $82,500 multi-year deal would raise
+      // a single $82,500 invoice off the raw row and skip the contract
+      // normalization below entirely. Only the action's own explicit
+      // `invoiceAmount` counts as a caller-supplied amount.
+      let amount = Number(context.invoiceAmount ?? 0) || 0
+      let invServiceType = (context.invoiceServiceType as string) ?? (context.service_type as string) ?? 'General'
+      let invCompany = company
+      if (contractId) {
+        const { data: contractRow } = await db
+          .from('contracts')
+          .select('company, company_id, value, service_type, billing_structure')
+          .eq('id', contractId)
+          .maybeSingle()
+        if (contractRow) {
+          if (!amount) {
+            const structure = contractRow.billing_structure ?? ''
+            const contractValue = Number(contractRow.value) || 0
+            // `contracts.value` is the per-billing-period amount (lib/metrics.ts),
+            // which is exactly what one invoice should charge. Using
+            // contractMonthlyValue() here instead would divide Quarterly by 3
+            // and Annual by 12 — the right figure for an MRR dashboard, the
+            // wrong one for an invoice — and would resolve a One-time or
+            // Milestone contract to 0, silently raising no invoice at all for
+            // precisely the contracts most likely to need one.
+            amount = isRecurringStructure(structure)
+              ? contractPeriodAmount(contractValue, structure)
+              : contractValue
+          }
+          if (!context.invoiceServiceType && contractRow.service_type) invServiceType = contractRow.service_type
+          if (!invCompany && contractRow.company) invCompany = contractRow.company
+        }
+      }
+
+      if (amount <= 0) {
+        console.warn(`[automations-engine] Create Invoice skipped for ${invCompany || 'unknown company'} — no positive amount resolved`)
+        break
+      }
+
+      const dueOffsetDays = Number(context.invoiceDueDays ?? 30) || 30
+      const dueDate = new Date(Date.now() + dueOffsetDays * 24 * 60 * 60 * 1000)
+        .toISOString().split('T')[0]
+
+      const newInvoiceId = `inv-auto-${uid()}`
+      await db.from('invoices').insert({
+        id: newInvoiceId,
+        company: invCompany,
+        company_id: invCompanyId,
+        // The field every existing invoice-creation path leaves null.
+        contract_id: contractId,
+        amount,
+        status: 'Pending',
+        issued_date: today,
+        issue_date: today,
+        due_date: dueDate,
+        service_type: invServiceType,
+        source: 'automation',
+      })
+
+      // Optional delivery, off by default. An automation that silently
+      // emailed a client without the operator asking for it would be a bad
+      // surprise, so this only fires when the action is explicitly
+      // configured to — but without it an auto-created invoice sits Pending
+      // forever, never delivered and (since the cron's overdue sweep only
+      // looks at 'Sent') never aged or chased either.
+      if (context.sendInvoice === true || context.sendInvoice === 'true') {
+        const sent = await sendInvoiceEmail(newInvoiceId, { actorName: 'Automation' }, db)
+        if (!sent.ok) {
+          console.warn(`[automations-engine] Create Invoice: ${newInvoiceId} created but not sent — ${sent.error}`)
+        }
+      }
+      break
+    }
+
+    // Sends an invoice that already exists — the counterpart to Create
+    // Invoice's opt-in delivery, for flows that raise the invoice elsewhere
+    // (the retainer cron, a staff member) and want the automation to handle
+    // getting it to the client.
+    case 'Send Invoice': {
+      const targetInvoiceId = (context.invoiceId as string) ?? (context.invoice_id as string) ?? null
+      if (!targetInvoiceId) {
+        console.warn('[automations-engine] Send Invoice skipped — no invoice in the trigger context')
+        break
+      }
+      const sent = await sendInvoiceEmail(targetInvoiceId, { actorName: 'Automation' }, db)
+      if (!sent.ok) {
+        console.warn(`[automations-engine] Send Invoice failed for ${targetInvoiceId} — ${sent.error}`)
+      }
       break
     }
 
@@ -848,17 +979,22 @@ async function executeAction(
       const monthKey = new Date().toISOString().slice(0, 7)
       const { data: contracts } = await db
         .from('contracts')
-        .select('value, billing_structure, status')
+        .select('value, billing_structure, status, service_type')
         .eq('status', 'Fully Executed')
-      const totalRevenue = (contracts ?? []).reduce((s: number, c: { value: number | null; billing_structure: string | null }) =>
-        s + contractMonthlyValue({ value: Number(c.value) || 0, billingStructure: c.billing_structure ?? '' }), 0)
-      const recurring = (contracts ?? [])
-        .filter((c: { billing_structure: string | null }) => {
-          const bs = (c.billing_structure ?? '').toLowerCase()
-          return !bs.includes('one') && !bs.includes('milestone') && !bs.includes('project')
-        })
-        .reduce((s: number, c: { value: number | null; billing_structure: string | null }) =>
-          s + contractMonthlyValue({ value: Number(c.value) || 0, billingStructure: c.billing_structure ?? '' }), 0)
+
+      // This used to re-implement the recurring test inline with its own
+      // string matching on billing_structure — the exact drift that let
+      // 'Custom' count as recurring here while the retainer cron ignored it.
+      // Both figures now come from lib/metrics.ts, so a change to what
+      // counts as recurring lands here automatically.
+      const mrrRows = (contracts ?? []).map((c: { value: number | null; billing_structure: string | null; service_type: string | null }) => ({
+        status: 'Fully Executed',
+        value: Number(c.value) || 0,
+        billingStructure: c.billing_structure ?? '',
+        serviceType: c.service_type,
+      }))
+      const totalRevenue = mrrRows.reduce((s, c) => s + contractMonthlyValue(c), 0)
+      const recurring = computeMRR(mrrRows)
       await db.from('revenue_months').upsert(
         { month: monthKey, revenue: totalRevenue, recurring },
         { onConflict: 'month' }
@@ -963,15 +1099,17 @@ async function executeAction(
       const dealId = (context.dealId as string) ?? null
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       let shouldEscalate = false
+      let dealCompanyId: string | null = null
       if (dealId) {
         const { data: deal } = await db
           .from('deals')
-          .select('last_activity, stage, company')
+          .select('last_activity, stage, company, company_id')
           .eq('id', dealId)
           .single()
         if (deal?.last_activity && new Date(deal.last_activity) < new Date(sevenDaysAgo)) {
           shouldEscalate = true
         }
+        dealCompanyId = deal?.company_id ?? null
       }
       if (shouldEscalate) {
         await db.from('app_tasks').insert({
@@ -982,6 +1120,7 @@ async function executeAction(
           priority: 'High',
           status: 'Pending',
           company,
+          company_id: dealCompanyId ?? (context.companyId as string) ?? (context.company_id as string) ?? null,
           assigned_to: 'Leadership',
           due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           created_date: today,

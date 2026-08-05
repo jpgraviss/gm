@@ -35,7 +35,17 @@ interface BookingType {
   buffer_minutes: number
   active: boolean
   intake_questions: IntakeQuestion[]
+  // AUDIT #699 — which staff calendar this type's appointments belong on.
+  // Null = unassigned, and calendar sync deliberately skips unassigned
+  // types rather than pushing to a random staff calendar.
+  owner_calendar_slug: string | null
   created_at: string
+}
+
+interface StaffCalendar {
+  slug: string
+  title: string
+  active: boolean
 }
 
 const DURATIONS = [15, 30, 45, 60, 90]
@@ -57,6 +67,7 @@ const DEFAULT_TYPE: Omit<BookingType, 'id' | 'slug' | 'created_at'> = {
   buffer_minutes: 15,
   active: true,
   intake_questions: [],
+  owner_calendar_slug: null,
 }
 
 function formatTime12(t: string) {
@@ -73,8 +84,14 @@ export default function BookingManagementPage() {
   const [editing, setEditing] = useState<Partial<BookingType> | null>(null)
   const [saving, setSaving] = useState(false)
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null)
+  const [staffCalendars, setStaffCalendars] = useState<StaffCalendar[]>([])
 
   useEffect(() => {
+    // AUDIT #699 — the calendars a booking type can be assigned to.
+    fetch('/api/calendar/calendars')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => setStaffCalendars(Array.isArray(d) ? d : []))
+      .catch(() => {})
     fetch('/api/calendar/booking-types')
       .then(r => r.ok ? r.json() : [])
       .then(d => { setTypes(Array.isArray(d) ? d : []); setLoading(false) })
@@ -323,6 +340,28 @@ export default function BookingManagementPage() {
                       ))}
                     </div>
                   </div>
+                </div>
+
+                {/* AUDIT #699 — without an owner, public bookings of this
+                    type used to land on whichever staff Google Calendar the
+                    sync happened to process first. */}
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Calendar Owner</label>
+                  <select
+                    value={editing.owner_calendar_slug ?? ''}
+                    onChange={e => setEditing(prev => ({ ...prev, owner_calendar_slug: e.target.value || null }))}
+                    className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                  >
+                    <option value="">Unassigned — bookings won&apos;t sync to a calendar</option>
+                    {staffCalendars.map(c => (
+                      <option key={c.slug} value={c.slug}>{c.title}{c.active ? '' : ' (inactive)'}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-gray-400 mt-1.5">
+                    {editing.owner_calendar_slug
+                      ? 'Appointments booked through this type sync to this person&apos;s Google Calendar.'
+                      : 'Assign an owner so booked appointments reach the right person&apos;s calendar.'}
+                  </p>
                 </div>
 
                 <div>

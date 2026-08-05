@@ -44,7 +44,7 @@ export default function FinanceHub() {
   const [mercuryLoading, setMercuryLoading] = useState(true)
   const [mercuryError, setMercuryError] = useState('')
   const [dashData, setDashData] = useState<{ totalCollected: number; overdueInvoices: number; activeClients: number } | null>(null)
-  const [contracts, setContracts] = useState<{ value: number; status: string; billingStructure: string }[]>([])
+  const [contracts, setContracts] = useState<{ value: number; status: string; billingStructure: string; serviceType?: string | null }[]>([])
 
   useEffect(() => {
     fetch('/api/dashboard')
@@ -56,7 +56,7 @@ export default function FinanceHub() {
     // ?limit=200 with no cursor follow-up silently undercounted MRR/KPI
     // math once an org passed 200 contracts. fetchAllPages() follows
     // X-Next-Cursor to completion.
-    fetchAllPages<{ value: number; status: string; billingStructure: string }>('/api/contracts')
+    fetchAllPages<{ value: number; status: string; billingStructure: string; serviceType?: string | null }>('/api/contracts')
       .then(setContracts)
       .catch(() => {})
 
@@ -146,7 +146,7 @@ export default function FinanceHub() {
               </p>
               <p className="text-xs text-gray-400">
                 {mercuryError.toLowerCase().includes('not configured') ? (
-                  <>Add your <code className="bg-gray-100 px-1.5 py-0.5 rounded">MERCURY_API_KEY</code> to environment variables.</>
+                  <>Ask an admin to connect it in <strong>Admin → Integrations</strong> — no developer/environment-variable access needed.</>
                 ) : mercuryError}
               </p>
             </div>

@@ -38,7 +38,7 @@ export const POST = withErrorHandler('calendar/booking-types POST', async (req) 
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
   const body = await req.json()
-  const { name, description, duration_minutes, location, color, availability, buffer_minutes, active, id, intake_questions } = body
+  const { name, description, duration_minutes, location, color, availability, buffer_minutes, active, id, intake_questions, owner_calendar_slug } = body
 
   if (!name?.trim()) {
     return NextResponse.json({ error: 'Name is required' }, { status: 400 })
@@ -68,6 +68,10 @@ export const POST = withErrorHandler('calendar/booking-types POST', async (req) 
         buffer_minutes: buffer_minutes ?? 15,
         active: active ?? true,
         intake_questions: intake_questions ?? [],
+        // AUDIT #699 — which staff calendar this booking type's appointments
+        // belong on. Null means unassigned, and calendar sync deliberately
+        // skips unassigned types rather than picking a random calendar.
+        owner_calendar_slug: owner_calendar_slug || null,
       })
       .eq('id', id)
       .select()
@@ -102,6 +106,7 @@ export const POST = withErrorHandler('calendar/booking-types POST', async (req) 
       buffer_minutes: buffer_minutes ?? 15,
       active: active ?? true,
       intake_questions: intake_questions ?? [],
+      owner_calendar_slug: owner_calendar_slug || null,
     })
     .select()
     .single()

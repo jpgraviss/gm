@@ -11,6 +11,7 @@ import CommandPalette from '@/components/ui/CommandPalette'
 import { ShieldAlert, X, Sparkles } from 'lucide-react'
 import PushNotificationBanner from '@/components/ui/PushNotificationBanner'
 import PageLoadingOverlay from './PageLoadingOverlay'
+import LoadingScreen from '@/components/ui/LoadingScreen'
 import { isPublicRoute } from '@/lib/public-routes'
 
 // Pages restricted to specific units. Admins (isAdmin=true) always have full access.
@@ -158,26 +159,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
 
+  // Two different full-page loading screens previously existed here: this
+  // hand-rolled spinner (auth resolving) and the shared LoadingScreen
+  // component every other page/data-fetch/route-transition in the app
+  // uses — LoadingScreen's own doc comment says it's meant to be "the one
+  // loading indicator used everywhere," but this one was never migrated to
+  // it. Consolidated to the shared component instead of maintaining two
+  // visually-inconsistent implementations of the same thing.
   if (loading) {
-    return (
-      <div
-        className="min-h-screen flex items-center justify-center"
-        style={{ background: 'var(--page-bg)' }}
-      >
-        <div className="flex flex-col items-center gap-3">
-          <div
-            className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin"
-            style={{ borderColor: '#015035', borderTopColor: 'transparent' }}
-          />
-          <p
-            className="text-xs font-semibold tracking-widest text-gray-400"
-            style={{ fontFamily: 'var(--font-heading)' }}
-          >
-            LOADING GRAVHUB...
-          </p>
-        </div>
-      </div>
-    )
+    return <LoadingScreen fullScreen label="Loading GravHub" />
   }
 
   // Public routes — no shell

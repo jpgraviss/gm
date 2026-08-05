@@ -136,3 +136,21 @@ export async function requireRole(
 export async function getAuthUser(req: NextRequest): Promise<AuthenticatedUser | null> {
   return getCurrentUser(req)
 }
+
+/**
+ * Pure hierarchy check against an already-resolved user — same semantics as
+ * requireRole (is_admin always passes, otherwise compare ROLE_HIERARCHY
+ * levels), minus the request/DB round trip. For routes that already hold an
+ * AuthenticatedUser from getAuthUser() and need a *second*, finer-grained
+ * tier check on top of their entry gate (e.g. "any Team Member may read this,
+ * but only Dept Manager+ sees the PII in it"). Calling requireRole again for
+ * that would re-run the whole session/team_members/IP-restriction lookup.
+ */
+export function hasRoleAtLeast(
+  user: AuthenticatedUser | null,
+  minRole: UserRole,
+): boolean {
+  if (!user) return false
+  if (user.isAdmin) return true
+  return roleLevel(user.role) >= roleLevel(minRole)
+}

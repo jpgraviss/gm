@@ -17,7 +17,19 @@
 
 export type ServiceLane = 'Marketing' | 'Sales'
 export type ServiceLayer = 'Foundation' | 'Fractional Leadership'
-export type ServiceCategory = 'One-Time Build' | 'Ongoing MRR' | 'Fractional Engagement'
+export type ServiceCategory =
+  | 'One-Time Build'
+  | 'Ongoing MRR'
+  | 'Fractional Engagement'
+  // Billed to the client and remitted straight on to a third party (ad
+  // platforms, travel, hardware). Cash moves through the agency but is not
+  // agency revenue, so it must be excluded from revenue totals entirely —
+  // not merely from MRR. Billing $10k of ad spend alongside a $2k management
+  // fee is $2k of revenue.
+  | 'Pass-Through'
+  // Real revenue that is neither run rate nor a standard one-time build —
+  // billed ad hoc (training, cancellation fees, hourly work).
+  | 'Other'
 
 interface ServiceTierInput {
   label: string
@@ -29,8 +41,10 @@ interface ServiceTierInput {
 
 interface ServiceDefinitionInput {
   name: string
-  lane: ServiceLane
-  layer: ServiceLayer
+  /** Omitted for billing/accounting categories that aren't sold as a
+   *  packaged offering in a lane (pass-through costs, cancellation fees). */
+  lane?: ServiceLane
+  layer?: ServiceLayer
   category: ServiceCategory
   color: string
   tiers?: readonly ServiceTierInput[]
@@ -54,7 +68,17 @@ const SERVICES_RAW = [
     tiers: [{ label: 'Website Management', price: 350, cadence: 'monthly' }],
   },
   {
-    name: 'SEO / AEO',
+    // Previously two separately-selectable catalog entries ('SEO / AEO' and
+    // 'GEO', the latter bundled under the former with no pricing of its own
+    // per a 2026-08-01 decision). User feedback: this is one service, not
+    // two things to pick independently — merged into a single entry.
+    // 'GEO' kept as an alias so any deal/project/proposal that already
+    // stored the literal 'GEO' value still resolves to a real color/name
+    // instead of falling back to gray.
+    // Renamed to 'SEO Management' (Jonathan's billing taxonomy). Every prior
+    // spelling stays an alias, so stored deals/contracts/invoices keep
+    // resolving to this entry and keep their revenue classification.
+    name: 'SEO Management',
     lane: 'Marketing', layer: 'Foundation', category: 'Ongoing MRR',
     color: 'bg-teal-100 text-teal-700',
     tiers: [
@@ -62,17 +86,10 @@ const SERVICES_RAW = [
       { label: 'Standard', price: 700, cadence: 'monthly' },
       { label: 'Premium', price: 900, cadence: 'monthly' },
     ],
-    aliases: ['SEO'],
+    aliases: ['SEO', 'AEO', 'GEO', 'SEO / AEO', 'SEO / AEO / GEO'],
   },
   {
-    name: 'GEO',
-    lane: 'Marketing', layer: 'Foundation', category: 'Ongoing MRR',
-    color: 'bg-sky-100 text-sky-700',
-    // Bundled under SEO / AEO engagements rather than sold on its own — no
-    // standalone tiers/pricing (per 2026-08-01 decision).
-  },
-  {
-    name: 'Social Media',
+    name: 'Social Media Management',
     lane: 'Marketing', layer: 'Foundation', category: 'Ongoing MRR',
     color: 'bg-pink-100 text-pink-700',
     tiers: [
@@ -80,6 +97,15 @@ const SERVICES_RAW = [
       { label: 'Standard', price: 2750, cadence: 'monthly' },
       { label: 'Premium', price: 4000, cadence: 'monthly', note: '$4,000+/mo' },
     ],
+    aliases: ['Social Media'],
+  },
+  {
+    name: 'Advertising Management',
+    lane: 'Marketing', layer: 'Foundation', category: 'Ongoing MRR',
+    color: 'bg-fuchsia-100 text-fuchsia-700',
+    // The agency's monthly fee for running paid media. Deliberately separate
+    // from 'Advertising Spend' below: the fee is revenue, the spend is not.
+    aliases: ['PPC', 'Paid Ads', 'Ad Management'],
   },
   {
     name: 'Email Marketing',
@@ -106,6 +132,10 @@ const SERVICES_RAW = [
   },
   // ── Sales Lane — Foundation ──────────────────────────────────────────────
   {
+    // Stays 'One-Time Build'. It was briefly reclassified to 'Other', which
+    // Jonathan corrected: a training sprint is a discrete one-time job that
+    // gets delivered, not a miscellaneous ad-hoc charge, so 'Other' described
+    // it inaccurately and hid real one-time revenue in a catch-all bucket.
     name: 'Sales Training',
     lane: 'Sales', layer: 'Foundation', category: 'One-Time Build',
     color: 'bg-orange-100 text-orange-700',
@@ -148,6 +178,51 @@ const SERVICES_RAW = [
       { label: 'Hourly Consulting', price: 250, cadence: 'hourly', note: '5-hr blocks' },
     ],
   },
+  // ── Pass-through — billed to the client, remitted to a third party ───────
+  // Not agency revenue. Excluded from MRR, one-time revenue AND revenue
+  // totals; reported separately so the cash movement is still visible.
+  {
+    name: 'Advertising Spend',
+    category: 'Pass-Through',
+    color: 'bg-slate-100 text-slate-700',
+    aliases: ['Ad Spend', 'Media Spend'],
+  },
+  {
+    name: 'Client Reimbursable Expenses',
+    category: 'Pass-Through',
+    color: 'bg-stone-100 text-stone-700',
+    // Replaces the previous free-text 'Travel Expense' and 'Amazon Order'
+    // values — kept as aliases so historical records reclassify to
+    // pass-through automatically instead of being counted as revenue.
+    aliases: ['Travel Expense', 'Amazon Order', 'Reimbursable Expenses', 'Expenses'],
+  },
+  // ── One-time jobs ────────────────────────────────────────────────────────
+  {
+    name: 'Onboarding and Setup Fee',
+    lane: 'Marketing', layer: 'Foundation', category: 'One-Time Build',
+    color: 'bg-sky-100 text-sky-700',
+    aliases: ['Onboarding Fee', 'Setup Fee', 'Onboarding'],
+  },
+  {
+    name: 'Content and Creative',
+    lane: 'Marketing', layer: 'Foundation', category: 'One-Time Build',
+    color: 'bg-rose-100 text-rose-700',
+    aliases: ['Content', 'Creative', 'Design', 'Content Marketing'],
+  },
+  // ── Other — real revenue, billed ad hoc ──────────────────────────────────
+  {
+    name: 'Cancellation',
+    category: 'Other',
+    color: 'bg-red-100 text-red-700',
+    aliases: ['Cancellation Fee', 'Early Termination'],
+  },
+  {
+    name: 'Hourly Services',
+    category: 'Other',
+    color: 'bg-zinc-100 text-zinc-700',
+    // Billed from logged time entries rather than a contract cadence.
+    aliases: ['Hourly', 'Hourly Consulting', 'Consulting'],
+  },
 ] as const satisfies readonly ServiceDefinitionInput[]
 
 export type ServiceName = typeof SERVICES_RAW[number]['name']
@@ -162,8 +237,8 @@ export interface ServiceTier {
 
 export interface ServiceDefinition {
   name: ServiceName
-  lane: ServiceLane
-  layer: ServiceLayer
+  lane?: ServiceLane
+  layer?: ServiceLayer
   category: ServiceCategory
   color: string
   tiers?: readonly ServiceTier[]
@@ -189,6 +264,50 @@ export function servicesByLayer(layer: ServiceLayer) {
 
 export function getService(name: string) {
   return SERVICES.find((s) => s.name === name || s.aliases?.includes(name))
+}
+
+/**
+ * Whether a service is sold as ongoing monthly work or as a one-time job.
+ *
+ * This is the identifier that keeps recurring and one-time revenue accounted
+ * for separately. It is deliberately a property of the *service*, not of the
+ * contract: 'Website Build' is a one-time job no matter how the client pays
+ * for it, and 'SEO / AEO / GEO' is a retainer no matter what.
+ *
+ * That distinction matters because the two can legitimately disagree. A
+ * $10,000 Website Build can be contracted as 12 monthly payments — a payment
+ * plan. The contract's `billing_structure` says Monthly and the retainer cron
+ * correctly invoices it every month, but it is NOT recurring revenue: it ends
+ * when the build is paid off, and counting it in MRR would overstate the
+ * agency's actual run rate by the size of every active payment plan.
+ * `lib/metrics.ts` uses this to keep those apart.
+ *
+ * Returns null for a service the catalog doesn't recognize (legacy free-text
+ * values like 'Consulting' or 'General'). Null means "unknown", not "one-time"
+ * — callers fall back to the contract's own billing structure rather than
+ * silently reclassifying historical records.
+ */
+export type RevenueKind = 'recurring' | 'one-time' | 'pass-through' | 'other'
+
+export function serviceRevenueKind(name?: string | null): RevenueKind | null {
+  if (!name) return null
+  const service = getService(name)
+  if (!service) return null
+  switch (service.category) {
+    case 'Ongoing MRR': return 'recurring'
+    case 'One-Time Build': return 'one-time'
+    // Billed to the client, remitted to a third party. Never revenue.
+    case 'Pass-Through': return 'pass-through'
+    // Real revenue, billed ad hoc — training, cancellation fees, hourly.
+    case 'Other': return 'other'
+    // Fractional engagements are sold as monthly retainer tiers (Tier 1-3),
+    // alongside a one-time assessment and hourly blocks. The retainer is the
+    // ongoing part and the reason a fractional client is on the books, so the
+    // service classifies as recurring; the one-time assessment is contracted
+    // separately, and hourly blocks are billed from time tracking rather
+    // than through a contract at all.
+    case 'Fractional Engagement': return 'recurring'
+  }
 }
 
 /** Pre-existing free-text service values that predate this catalog. Kept for
@@ -277,7 +396,11 @@ export function normalizeServiceType(val?: string | null, fallback?: string | nu
   if (check.includes('sales enablement') || check.includes('enablement foundation') || check.includes('enablement core') || check.includes('enablement system')) return 'Sales Enablement'
   if (check.includes('website manage')) return 'Website Management'
   if (check.includes('website') || check.includes('web design') || check.includes('web dev')) return 'Website Build'
-  if (check.includes('seo') || check.includes('aeo')) return 'SEO / AEO'
+  // Word-boundary match, not a plain substring check — 'geo' in particular
+  // is a common substring of real company/deal names with no relation to
+  // SEO ("Georgia Outdoor Advertising" was misclassified as SEO/AEO/GEO
+  // before this fix, purely because "Georgia" contains "geo").
+  if (/\b(seo|aeo|geo)\b/.test(check)) return 'SEO / AEO / GEO'
   if (check.includes('social')) return 'Social Media'
   if (check.includes('email')) return 'Email Marketing'
   if (check.includes('brand')) return 'Branding'

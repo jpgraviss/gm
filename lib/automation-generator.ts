@@ -21,6 +21,8 @@ export const VALID_TRIGGERS = [
   'Contract Sent', 'Invoice Paid', 'Invoice Overdue',
   'Renewal Date Within 90 Days', 'Renewal Date Within 30 Days',
   'Deal Stage Changed', 'Contact Created', 'Form Submitted',
+  'Project Status Changed', 'Project Completed', 'Task Completed',
+  'Ticket Created', 'Ticket Reply Received',
 ] as const
 
 // AUDIT #516 — this hardcoded list is now only the last-resort fallback for
@@ -53,6 +55,7 @@ const ACTION_CATALOG: Record<string, string | null> = {
   'Wait': `duration (number), unit (one of: ${WAIT_UNITS.join('|')})`,
   'If/Else': `field (string — a fact from the trigger event, e.g. "value" or "stage"), operator (one of: ${CONDITION_OPERATORS.join('|')}), value (string to compare against)`,
   'Create Draft Contract': null,
+  'Create Invoice': 'amount (number, optional — omit to pull the per-period value off the linked contract), serviceType (string, optional), dueDays (number, optional — days until due, default 30)',
   'Create Billing Task': null,
   'Create Renewal Task': null,
   'Create Project Record': null,

@@ -7,7 +7,9 @@ import Header from '@/components/layout/Header'
 import StatusBadge from '@/components/ui/StatusBadge'
 import { projectStatusColors, formatDate } from '@/lib/utils'
 import { SERVICE_NAMES, serviceTypeColors } from '@/lib/services'
-import type { Project, ProjectStatus, AppTask, AppTaskStatus, TaskPriority } from '@/lib/types'
+import type { Project, ProjectStatus, AppTask, AppTaskStatus, TaskPriority, TimeEntry } from '@/lib/types'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
+import { formatUsd } from '@/lib/format-currency'
 import { useToast } from '@/components/ui/Toast'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import { useAuth } from '@/contexts/AuthContext'
@@ -53,7 +55,11 @@ const taskStatusConfig: Record<AppTaskStatus, { icon: React.ReactNode; color: st
 const serviceTypeIcons: Partial<Record<string, React.ReactNode>> = {
   'Website Build': <Globe size={14} />,
   'Website Management': <Globe size={14} />,
+  // 'SEO / AEO' kept alongside the current 'SEO / AEO / GEO' catalog name
+  // (lib/services.ts) so projects tagged before the two were merged into
+  // one service still get an icon instead of silently falling back.
   'SEO / AEO': <BarChart2 size={14} />,
+  'SEO / AEO / GEO': <BarChart2 size={14} />,
   'Social Media': <Share2 size={14} />,
   'Email Marketing': <Mail size={14} />,
   'Fractional CMO': <Briefcase size={14} />,
@@ -97,6 +103,10 @@ function mapProjectResponse(proj: any): Project {
     sections: proj.sections ?? ['To Do', 'In Progress', 'Done'],
     color: proj.color ?? '#015035',
     description: proj.description ?? '',
+    // `?? null`, never `?? 0` — null is the real "not tracked" state and the
+    // budget panel below only renders when at least one of these is set.
+    budgetAmount: proj.budget_amount ?? proj.budgetAmount ?? null,
+    estimatedHours: proj.estimated_hours ?? proj.estimatedHours ?? null,
   }
 }
 
@@ -568,6 +578,15 @@ function ProjectSettingsModal({
   const [selectedTeam, setSelectedTeam] = useState(project.assignedTeam)
   const [description, setDescription] = useState(project.description ?? '')
   const [overview, setOverview] = useState(project.overview ?? '')
+  // Held as strings so clearing a field back to '' round-trips to SQL NULL
+  // ("not tracked") instead of 0 — the API's parseNullableNumber maps '' to
+  // null and rejects anything non-numeric.
+  const [budgetAmount, setBudgetAmount] = useState(
+    project.budgetAmount === null || project.budgetAmount === undefined ? '' : String(project.budgetAmount),
+  )
+  const [estimatedHours, setEstimatedHours] = useState(
+    project.estimatedHours === null || project.estimatedHours === undefined ? '' : String(project.estimatedHours),
+  )
 
   const colors = ['#015035', '#3b82f6', '#8b5cf6', '#ef4444', '#f59e0b', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1']
 
@@ -620,6 +639,21 @@ function ProjectSettingsModal({
               <input type="date" value={launchDate} onChange={e => setLaunchDate(e.target.value)} className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none" />
             </div>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Budget ($)</label>
+              <input type="number" min="0" step="0.01" value={budgetAmount} onChange={e => setBudgetAmount(e.target.value)}
+                placeholder="Not tracked"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-600" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Est. Hours</label>
+              <input type="number" min="0" step="0.25" value={estimatedHours} onChange={e => setEstimatedHours(e.target.value)}
+                placeholder="Not tracked"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-emerald-600" />
+            </div>
+          </div>
+          <p className="-mt-2 text-[11px] text-gray-400">Leave blank to leave this project untracked — blank is not zero.</p>
           <div>
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Project Color</label>
             <div className="flex gap-2 flex-wrap">
@@ -650,7 +684,14 @@ function ProjectSettingsModal({
           <button
             onClick={() => {
               const services = selectedServices.length > 0 ? selectedServices : ['General']
-              onUpdate({ company, companyId, serviceType: services[0] as Project['serviceType'], serviceTypes: services as Project['serviceTypes'], status, startDate, launchDate, color, assignedTeam: selectedTeam, description, overview })
+              onUpdate({
+                company, companyId,
+                serviceType: services[0] as Project['serviceType'],
+                serviceTypes: services as Project['serviceTypes'],
+                status, startDate, launchDate, color, assignedTeam: selectedTeam, description, overview,
+                budgetAmount: budgetAmount.trim() === '' ? null : Number(budgetAmount),
+                estimatedHours: estimatedHours.trim() === '' ? null : Number(estimatedHours),
+              })
               onClose()
             }}
             className="flex-1 py-2.5 rounded-xl text-white text-sm font-semibold"
@@ -687,6 +728,8 @@ export default function ProjectDetailPage() {
   const [newMilestoneDue, setNewMilestoneDue] = useState('')
   const [showNoteForm, setShowNoteForm] = useState(false)
   const [noteText, setNoteText] = useState('')
+  const [projectTimeEntries, setProjectTimeEntries] = useState<TimeEntry[] | null>(null)
+  const [timeEntriesFailed, setTimeEntriesFailed] = useState(false)
 
   useEffect(() => {
     if (!id) return
@@ -702,6 +745,42 @@ export default function ProjectDetailPage() {
     }).catch(() => toast('Failed to load project', 'error'))
       .finally(() => setLoading(false))
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Budget/estimate tracking is opt-in per project: a project with neither
+  // field set gets no extra fetch and no extra widget — it looks exactly as
+  // it did before this feature existed.
+  const budgetTracked = project?.budgetAmount != null || project?.estimatedHours != null
+
+  useEffect(() => {
+    if (!id || !budgetTracked) return
+    // /api/time-entries is cursor-paginated (100/page) — fetchAllPages()
+    // follows X-Next-Cursor to completion. A raw fetch() here would silently
+    // cap the hours total at the first page on any long-running project and
+    // report a project that's over its estimate as comfortably under it.
+    fetchAllPages<TimeEntry>(`/api/time-entries?projectId=${id}`)
+      .then(rows => { setProjectTimeEntries(rows); setTimeEntriesFailed(false) })
+      .catch(() => { setProjectTimeEntries(null); setTimeEntriesFailed(true) })
+  }, [id, budgetTracked])
+
+  // Hours actually logged against this project. Same aggregation the
+  // existing billable summary uses (GET /api/time-entries/billable-summary):
+  // sum hours*60 + minutes in whole minutes, and drop entries a manager
+  // explicitly rejected (`!== 'rejected'` rather than `=== 'approved'`,
+  // since entries default to 'pending' and nothing else in this codebase
+  // treats pending as not-yet-real).
+  const loggedMinutes = useMemo(() => {
+    if (!projectTimeEntries) return null
+    return projectTimeEntries
+      .filter(e => e.approvalStatus !== 'rejected')
+      .reduce((sum, e) => sum + (e.hours ?? 0) * 60 + (e.minutes ?? 0), 0)
+  }, [projectTimeEntries])
+
+  const billableMinutes = useMemo(() => {
+    if (!projectTimeEntries) return null
+    return projectTimeEntries
+      .filter(e => e.approvalStatus !== 'rejected' && e.billable)
+      .reduce((sum, e) => sum + (e.hours ?? 0) * 60 + (e.minutes ?? 0), 0)
+  }, [projectTimeEntries])
 
   const projectColor = project?.color ?? '#015035'
   const sections = project?.sections ?? ['To Do', 'In Progress', 'Done']
@@ -1251,6 +1330,97 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
             </div>
+
+            {/* Budget & Hours — rendered ONLY when this project actually has
+                a budget or an estimate. A project with neither must not gain
+                an empty widget, so there is no "not set" placeholder card. */}
+            {budgetTracked && (() => {
+              const estimated = project.estimatedHours ?? null
+              const loggedHours = loggedMinutes === null ? null : loggedMinutes / 60
+              const billableHours = billableMinutes === null ? null : billableMinutes / 60
+              const pct = estimated && estimated > 0 && loggedHours !== null
+                ? Math.round((loggedHours / estimated) * 100)
+                : null
+              const over = pct !== null && pct > 100
+              const fmtHours = (h: number) => (Math.round(h * 10) / 10).toLocaleString('en-US')
+
+              return (
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Budget &amp; Hours</h3>
+
+                  {timeEntriesFailed ? (
+                    <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                      Couldn’t load logged time — hours below would be wrong, so they aren’t shown.
+                    </p>
+                  ) : loggedHours === null ? (
+                    <p className="text-sm text-gray-400">Loading logged time…</p>
+                  ) : (
+                    <>
+                      {estimated !== null && estimated > 0 ? (
+                        <>
+                          <div className="flex justify-between items-baseline mb-2">
+                            <span className="text-sm text-gray-600">
+                              <b className="text-gray-900">{fmtHours(loggedHours)}h</b> logged of {fmtHours(estimated)}h estimated
+                            </span>
+                            <span className={`text-sm font-bold ${over ? 'text-red-600' : 'text-gray-800'}`}>{pct}%</span>
+                          </div>
+                          <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all"
+                              style={{ width: `${Math.min(pct ?? 0, 100)}%`, background: over ? '#ef4444' : projectColor }}
+                            />
+                          </div>
+                          <p className={`text-xs mt-2 ${over ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
+                            {over
+                              ? `${fmtHours(loggedHours - estimated)}h over estimate`
+                              : `${fmtHours(estimated - loggedHours)}h remaining`}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-gray-600">
+                          <b className="text-gray-900">{fmtHours(loggedHours)}h</b> logged · no hours estimate set for this project
+                        </p>
+                      )}
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+                        <div className="p-3 bg-gray-50 rounded-xl">
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Hours Logged</p>
+                          <p className="text-sm font-semibold text-gray-800">{fmtHours(loggedHours)}h</p>
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded-xl">
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Billable Hours</p>
+                          <p className="text-sm font-semibold text-gray-800">{billableHours === null ? '—' : `${fmtHours(billableHours)}h`}</p>
+                        </div>
+                        <div className="p-3 bg-gray-50 rounded-xl">
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wide font-semibold mb-1">Budget</p>
+                          <p className="text-sm font-semibold text-gray-800">
+                            {project.budgetAmount === null || project.budgetAmount === undefined ? 'Not tracked' : formatUsd(project.budgetAmount)}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Deliberately no spend-vs-budget bar and no dollar
+                          figure derived from hours. There is no billing rate
+                          anywhere in this schema — not on projects, contracts,
+                          team_members or time_entries — and invoices carry no
+                          project_id either, so neither a rate-based nor an
+                          invoice-based spend figure can be computed. Inventing
+                          a house rate here would produce a confident,
+                          wrong "over/under budget" number. To make this real,
+                          add a rate source (per-project rate, or a per-service
+                          rate card the time entry's service_type resolves
+                          against) and multiply it by the billable hours above. */}
+                      {project.budgetAmount !== null && project.budgetAmount !== undefined && (
+                        <p className="text-xs text-gray-400 mt-3">
+                          Spend against budget isn’t shown: no billing rate is recorded anywhere in GravHub yet,
+                          so dollars-burned can’t be calculated from these hours.
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* Dates & Info */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">

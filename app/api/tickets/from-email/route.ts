@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
+import { getValidGmailToken } from '@/lib/gmail-oauth'
 import { requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
 import { applyRoutingRules, notifyRoutedAssignee } from '@/lib/ticket-routing'
-import { decrypt } from '@/lib/encryption'
 
 type Db = ReturnType<typeof createServiceClient>
 
@@ -217,15 +217,19 @@ export const POST = withErrorHandler('tickets/from-email POST', async (req: Next
   // each connected mailbox is effectively a monitored support inbox.
   const { data: staffWithGmail } = await db
     .from('team_members')
-    .select('id, email, gmail_access_token, gmail_token_expires_at')
+    .select('id, email, gmail_access_token, gmail_refresh_token, gmail_token_expires_at')
     .not('gmail_access_token', 'is', null)
 
-  const now = Date.now()
-  const validAccounts = (staffWithGmail ?? []).filter(s => {
-    if (!s.gmail_access_token) return false
-    if (!s.gmail_token_expires_at) return true
-    return new Date(s.gmail_token_expires_at).getTime() > now + 5 * 60 * 1000
-  })
+  // AUDIT #23 — this used to filter on stored expiry alone, so roughly an
+  // hour after anyone connected Gmail their mailbox dropped out of the poll
+  // silently, and inbound support email simply stopped becoming tickets.
+  // Resolving a live token per account refreshes the ones that can be
+  // refreshed; the rest are genuinely disconnected and correctly excluded.
+  const validAccounts: { id: string; email: string; token: string }[] = []
+  for (const account of staffWithGmail ?? []) {
+    const token = await getValidGmailToken(account)
+    if (token) validAccounts.push({ id: account.id, email: account.email, token })
+  }
 
   if (validAccounts.length === 0) {
     return NextResponse.json({ error: 'No team member has a connected, unexpired Gmail account' }, { status: 400 })
@@ -240,7 +244,7 @@ export const POST = withErrorHandler('tickets/from-email POST', async (req: Next
 
   for (const account of validAccounts) {
     try {
-      const result = await processInbox(db, decrypt(account.gmail_access_token as string), contacts ?? [], companies ?? [])
+      const result = await processInbox(db, account.token, contacts ?? [], companies ?? [])
       created += result.created
       skipped += result.skipped
     } catch (err) {

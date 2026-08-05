@@ -77,7 +77,7 @@ function downloadReceipt(invoice: Invoice) {
         <p>${invoice.id.toUpperCase()}</p>
       </div>
       <div class="body">
-        <div class="amount">$${invoice.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+        <div class="amount">$${(invoice.amountPaid ?? invoice.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
         <div class="row"><span class="label">Company</span><span class="value">${invoice.company}</span></div>
         <div class="row"><span class="label">Service Type</span><span class="value">${invoice.serviceType}</span></div>
         <div class="row"><span class="label">Issued Date</span><span class="value">${invoice.issuedDate}</span></div>
@@ -92,13 +92,82 @@ function downloadReceipt(invoice: Invoice) {
   w.document.close()
 }
 
-function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: Invoice; onClose: () => void; contracts: Contract[]; allInvoices: Invoice[] }) {
+function InvoicePanel({ invoice, onClose, onUpdate, contracts, allInvoices }: { invoice: Invoice; onClose: () => void; onUpdate: (id: string, patch: Partial<Invoice>) => void; contracts: Contract[]; allInvoices: Invoice[] }) {
   const { toast } = useToast()
   const [generatingLink, setGeneratingLink] = useState(false)
+  const [sending, setSending] = useState(false)
+  const [updatingStatus, setUpdatingStatus] = useState(false)
   const linkedContract = contracts.find(c => c.id === invoice.contractId)
   const relatedInvoices = allInvoices.filter(i => i.contractId === invoice.contractId && i.id !== invoice.id)
   const isOverdue = invoice.status === 'Overdue'
   const isPaid = invoice.status === 'Paid'
+
+  // AUDIT #694 — this panel had no way to change an invoice's status at
+  // all (only "Copy Payment Link" / "Download Receipt"). The only place in
+  // the app such a control existed was app/contracts/page.tsx's
+  // ContractPanel → "Linked Invoices", only reachable for an invoice that
+  // resolves to some contract — invoices created via "Create Invoice from
+  // Unbilled Time" or CSV import never set contractId, and a company with
+  // no contract had nowhere for such an invoice to surface at all. Staff
+  // had no in-app way to record a non-Stripe payment (check/wire/cash) as
+  // Paid, or move Pending → Sent, for a real subset of invoices. Mirrors
+  // ContractPanel's handleInvoiceAction pattern.
+  async function handleStatusChange(next: InvoiceStatus) {
+    setUpdatingStatus(true)
+    try {
+      const body: Record<string, unknown> = { status: next }
+      const patch: Partial<Invoice> = { status: next }
+      if (next === 'Paid') {
+        const today = new Date().toISOString().split('T')[0]
+        body.paidDate = today
+        patch.paidDate = today
+      }
+      const res = await fetch(`/api/invoices/${invoice.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (!res.ok) throw new Error('Failed to update invoice')
+      onUpdate(invoice.id, patch)
+      toast(`${invoice.id.toUpperCase()} marked as ${next}`, 'success')
+    } catch {
+      toast('Failed to update invoice status. Please try again.', 'error')
+    } finally {
+      setUpdatingStatus(false)
+    }
+  }
+
+  // Emails the invoice to the client's billing contact and moves it
+  // Pending → Sent. Until this existed there was no way to send an invoice
+  // from the app at all — 'Sent' could only be reached by hand-editing the
+  // status after emailing it from somewhere else, which meant the whole
+  // overdue/dunning pipeline downstream of it started from a status nothing
+  // ever set on its own.
+  async function handleSendInvoice() {
+    if (!confirm(`Email this invoice to ${invoice.company}'s billing contact?`)) return
+    setSending(true)
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/send`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to send the invoice', 'error')
+        return
+      }
+      // statusUnchanged means it was already Sent or Overdue — a resend, not
+      // a first send. Say which happened rather than implying a state change
+      // that didn't occur.
+      if (data.statusUnchanged) {
+        toast(`Invoice re-sent to ${data.recipient}`, 'success')
+      } else {
+        onUpdate(invoice.id, { status: 'Sent' })
+        toast(`Invoice sent to ${data.recipient}`, 'success')
+      }
+    } catch {
+      toast('Failed to send the invoice. Please try again.', 'error')
+    } finally {
+      setSending(false)
+    }
+  }
 
   async function handleCopyPaymentLink() {
     setGeneratingLink(true)
@@ -231,6 +300,38 @@ function InvoicePanel({ invoice, onClose, contracts, allInvoices }: { invoice: I
         </div>
 
         <div className="flex-shrink-0 p-4 border-t border-gray-100 flex flex-col gap-2">
+          {(invoice.status === 'Pending' || (invoice.status !== 'Paid' && invoice.status !== 'Cancelled')) && (
+            <div className="flex gap-2">
+              {invoice.status === 'Pending' && (
+                <button
+                  onClick={() => handleStatusChange('Sent')}
+                  disabled={updatingStatus}
+                  className="flex-1 py-2 rounded-xl border border-gray-200 text-gray-700 text-xs font-semibold hover:bg-gray-50 transition-colors disabled:opacity-50"
+                >
+                  {updatingStatus ? 'Updating...' : 'Mark as Sent'}
+                </button>
+              )}
+              <button
+                onClick={() => handleStatusChange('Paid')}
+                disabled={updatingStatus}
+                className="flex-1 py-2 rounded-xl border border-emerald-200 text-emerald-700 text-xs font-semibold hover:bg-emerald-50 transition-colors disabled:opacity-50"
+              >
+                {updatingStatus ? 'Updating...' : 'Mark as Paid'}
+              </button>
+            </div>
+          )}
+          {invoice.status !== 'Paid' && invoice.status !== 'Cancelled' && (
+            <button
+              onClick={handleSendInvoice}
+              disabled={sending}
+              className="w-full py-2 mb-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ background: '#012b1e' }}
+            >
+              {sending
+                ? 'Sending...'
+                : invoice.status === 'Pending' ? 'Send Invoice to Client' : 'Re-send Invoice'}
+            </button>
+          )}
           <div className="flex gap-2">
             {invoice.status === 'Paid' && (
               <button onClick={() => downloadReceipt(invoice)} className="flex-1 py-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90" style={{ background: '#015035' }}>
@@ -1030,6 +1131,10 @@ export default function BillingPage() {
         <InvoicePanel
           invoice={selectedInvoice}
           onClose={() => setSelectedInvoice(null)}
+          onUpdate={(id, patch) => {
+            setLocalInvoices(prev => prev.map(i => i.id === id ? { ...i, ...patch } : i))
+            setSelectedInvoice(prev => prev && prev.id === id ? { ...prev, ...patch } : prev)
+          }}
           contracts={contracts}
           allInvoices={localInvoices}
         />

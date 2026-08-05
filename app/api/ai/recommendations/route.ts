@@ -22,7 +22,7 @@ export const GET = withErrorHandler('ai/recommendations GET', async (req) => {
 
     const company = companyRes.data
     if (!company) {
-      return NextResponse.json([])
+      return NextResponse.json({ recommendations: [], source: 'fallback' })
     }
 
     const recommendations = await getRecommendations({
@@ -70,6 +70,8 @@ export const GET = withErrorHandler('ai/recommendations GET', async (req) => {
       })),
     })
 
+    // AUDIT #709 — response now carries `source` so the UI can distinguish
+    // real model output from the rule-based fallback.
     return NextResponse.json(recommendations)
   }
 

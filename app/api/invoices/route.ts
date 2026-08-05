@@ -4,6 +4,8 @@ import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pa
 import { validate, validationError, INVOICE_STATUSES } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { logActivity } from '@/lib/activity-log'
+import { formatUsd } from '@/lib/format-currency'
 import { requirePortalClient } from '@/lib/portal-auth'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -167,6 +169,16 @@ export const POST = withErrorHandler('invoices POST', async (req) => {
       }, { status: 409 })
     }
   }
+
+  // Finance previously never wrote to crm_activities, so an invoice being
+  // raised was invisible on the client's own Activity timeline.
+  logActivity({
+    type: 'invoice',
+    title: `Invoice raised — ${formatUsd(data.amount)}`,
+    body: `${data.service_type ?? 'General'} · due ${data.due_date ?? 'unspecified'}`,
+    companyId: data.company_id,
+    companyName: data.company,
+  })
 
   return NextResponse.json(mapInvoice(data), { status: 201 })
 })

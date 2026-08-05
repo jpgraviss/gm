@@ -13,6 +13,21 @@ export interface Recommendation {
   contactName?: string
 }
 
+/**
+ * AUDIT #709 — `getRecommendations()` used to return a bare
+ * `Recommendation[]`, so when every AI provider tier was unreachable its
+ * rule-based `generateFallbackRecommendations()` output was rendered under
+ * the same "AI Insights" / "AI Recommendations" label with nothing to
+ * distinguish it. Staff had no way to tell canned heuristics from real
+ * model output while relying on it for account planning. The sibling
+ * `ai/generate` and `ai/insights` endpoints already expose a `source`;
+ * this brings this path in line.
+ */
+export interface RecommendationsResult {
+  recommendations: Recommendation[]
+  source: 'ai' | 'fallback'
+}
+
 interface CompanyContext {
   id: string
   name: string
@@ -129,14 +144,14 @@ export async function getRecommendations(opts: {
   deals: DealContext[]
   contracts: ContractContext[]
   activities: ActivityContext[]
-}): Promise<Recommendation[]> {
+}): Promise<RecommendationsResult> {
   const { companyId, companies, contacts, deals, contracts: contractList, activities } = opts
 
   const targetCompanies = companyId
     ? companies.filter(c => c.id === companyId)
     : companies
 
-  if (targetCompanies.length === 0) return []
+  if (targetCompanies.length === 0) return { recommendations: [], source: 'fallback' }
 
   const isSingleCompany = targetCompanies.length === 1
   const contextLines: string[] = []
@@ -180,19 +195,20 @@ Each item must have: type (follow_up|upsell|at_risk|renewal_reminder|engagement_
       const jsonMatch = result.text.match(/\[[\s\S]*\]/)
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]) as Recommendation[]
-        if (isSingleCompany) {
-          return parsed
-            .filter(r => !r.companyName || r.companyName === targetCompanies[0].name)
-            .slice(0, 5)
-        }
-        return parsed.slice(0, 5)
+        const recommendations = isSingleCompany
+          ? parsed.filter(r => !r.companyName || r.companyName === targetCompanies[0].name).slice(0, 5)
+          : parsed.slice(0, 5)
+        return { recommendations, source: 'ai' }
       }
     }
   } catch {
     // fall through to fallback
   }
 
-  return generateFallbackRecommendations(targetCompanies, deals, contractList, activities)
+  return {
+    recommendations: generateFallbackRecommendations(targetCompanies, deals, contractList, activities),
+    source: 'fallback',
+  }
 }
 
 function generateFallbackRecommendations(

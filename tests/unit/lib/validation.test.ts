@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { validate } from '@/lib/validation'
+import { validate, parseNullableNumber } from '@/lib/validation'
 
 describe('validate', () => {
   describe('required field validation', () => {
@@ -121,5 +121,38 @@ describe('validate', () => {
       const result = validate(body, schema)
       expect(result).toEqual({ valid: true, data: body })
     })
+  })
+})
+
+// projects.budget_amount / projects.estimated_hours must be able to hold
+// "not tracked" (NULL) as a state distinct from an explicit 0 — a default of
+// 0 would make every untracked project read as "0h budgeted, 100% over".
+describe('parseNullableNumber', () => {
+  it('treats an omitted field as untouched, not as a clear', () => {
+    expect(parseNullableNumber(undefined)).toEqual({ ok: true, value: undefined })
+  })
+
+  it('maps null and empty string to null (clear back to "not tracked")', () => {
+    expect(parseNullableNumber(null)).toEqual({ ok: true, value: null })
+    expect(parseNullableNumber('')).toEqual({ ok: true, value: null })
+  })
+
+  it('keeps an explicit zero as 0 rather than collapsing it to null', () => {
+    expect(parseNullableNumber(0)).toEqual({ ok: true, value: 0 })
+    expect(parseNullableNumber('0')).toEqual({ ok: true, value: 0 })
+  })
+
+  it('accepts numbers and numeric strings from form inputs', () => {
+    expect(parseNullableNumber(1200.5)).toEqual({ ok: true, value: 1200.5 })
+    expect(parseNullableNumber('40.25')).toEqual({ ok: true, value: 40.25 })
+  })
+
+  it('rejects non-numeric, negative and non-finite input instead of dropping it', () => {
+    expect(parseNullableNumber('abc')).toEqual({ ok: false })
+    expect(parseNullableNumber(-1)).toEqual({ ok: false })
+    expect(parseNullableNumber(Infinity)).toEqual({ ok: false })
+    expect(parseNullableNumber(NaN)).toEqual({ ok: false })
+    expect(parseNullableNumber({})).toEqual({ ok: false })
+    expect(parseNullableNumber(true)).toEqual({ ok: false })
   })
 })

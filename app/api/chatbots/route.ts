@@ -40,13 +40,34 @@ export const POST = withErrorHandler('chatbots POST', async (req) => {
     return NextResponse.json({ error: 'Name is required' }, { status: 400 })
   }
 
+  // AUDIT #346 — a chatbot with no `website_url` is origin-bound to nothing,
+  // so anyone who finds or brute-forces its id (~31 bits, timestamp-prefixed)
+  // can embed it on any site, burn this tenant's AI spend and impersonate
+  // their brand off-domain. That state was previously reachable by simply
+  // leaving a field blank.
+  //
+  // "Embed anywhere" is a legitimate thing to want, so this doesn't remove
+  // it — it just stops it happening by accident. A new bot must either name
+  // the site it belongs on, or say `allowAnyOrigin` out loud. Existing bots
+  // are untouched: this is creation-time only, and the runtime check below
+  // still treats a legacy bot with neither set exactly as it did before, so
+  // nothing live breaks.
+  const settings = (body.settings ?? {}) as Record<string, unknown>
+  const websiteUrl = typeof body.website_url === 'string' ? body.website_url.trim() : ''
+  if (!websiteUrl && settings.allowAnyOrigin !== true) {
+    return NextResponse.json(
+      { error: 'Set a website URL so this chatbot only works on your own site, or explicitly allow embedding on any domain.' },
+      { status: 400 },
+    )
+  }
+
   const db = createServiceClient()
   const id = `bot_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 
   const row = {
     id,
     name: body.name.trim(),
-    website_url: body.website_url ?? null,
+    website_url: websiteUrl || null,
     welcome_message: body.welcome_message ?? 'Hi! How can I help you today?',
     system_prompt: body.system_prompt ?? 'You are a helpful assistant.',
     knowledge: body.knowledge ?? null,

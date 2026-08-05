@@ -33,12 +33,16 @@ const TYPE_COLORS: Record<DocumentTemplate['type'], string> = {
   addendum: 'bg-amber-100 text-amber-700',
 }
 
-// The AI Assistant's generate_document tool and Apply Service Template
-// automation action both fill these bracket tokens in from real
-// deal/contract data — matches lib/automations-engine.ts's ai/chat
-// generate_document implementation exactly, so a template author here can
-// see what the AI-fill path will actually replace.
-const KNOWN_PLACEHOLDERS = ['[CLIENT NAME]', '[DATE]', '[COMPANY]', '[AMOUNT]', '[SERVICE]']
+// AUDIT #697 — this listed [AMOUNT]/[SERVICE], but the deterministic "Apply
+// Service Template" automation action (lib/automations-engine.ts's
+// `placeholderData`, the real one that actually emails a filled document to
+// a client per #524) only ever fills [VALUE]/[SERVICE TYPE] — never AMOUNT
+// or SERVICE. A template author trusting this list and writing [AMOUNT] or
+// [SERVICE] got that literal bracket text sent verbatim in a real
+// client-facing email. Kept in sync with placeholderData's actual key set;
+// the AI Assistant's generate_document tool is separate and free-form (any
+// [TOKEN] the model decides to pass), not bound to this fixed list.
+const KNOWN_PLACEHOLDERS = ['[CLIENT NAME]', '[DATE]', '[COMPANY]', '[VALUE]', '[SERVICE TYPE]']
 
 function EditorPanel({
   template,

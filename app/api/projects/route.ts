@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { validate, validationError, PROJECT_STATUSES } from '@/lib/validation'
+import { validate, validationError, parseNullableNumber, PROJECT_STATUSES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
@@ -28,8 +28,14 @@ function mapProject(row: any) {
     sections:             row.sections ?? ['To Do', 'In Progress', 'Done'],
     color:                row.color ?? '#015035',
     description:          row.description ?? '',
+    // Null means "not tracked", never 0 — every pre-existing project has
+    // neither set, and defaulting them to 0 would render as "0h budgeted,
+    // 100% over" on the detail page. `?? null` (not `?? 0`) on purpose.
+    budgetAmount:         row.budget_amount ?? null,
+    estimatedHours:       row.estimated_hours ?? null,
   }
 }
+
 
 export const GET = withErrorHandler('projects GET', async (req) => {
   const { searchParams } = new URL(req.url)
@@ -76,6 +82,11 @@ export const POST = withErrorHandler('projects POST', async (req) => {
   })
   if (!result.valid) return validationError(result.error)
 
+  const budgetAmount = parseNullableNumber(body.budgetAmount)
+  if (!budgetAmount.ok) return validationError('budgetAmount must be a non-negative number or null')
+  const estimatedHours = parseNullableNumber(body.estimatedHours)
+  if (!estimatedHours.ok) return validationError('estimatedHours must be a non-negative number or null')
+
   const serviceTypes: string[] = Array.isArray(body.serviceTypes) && body.serviceTypes.length > 0
     ? body.serviceTypes
     : body.serviceType ? [body.serviceType] : ['General']
@@ -112,6 +123,9 @@ export const POST = withErrorHandler('projects POST', async (req) => {
       sections:      body.sections ?? ['To Do', 'In Progress', 'Done'],
       color:         body.color ?? '#015035',
       description:   body.description ?? '',
+      // `?? null` keeps "not tracked" as NULL rather than 0.
+      budget_amount:   budgetAmount.value ?? null,
+      estimated_hours: estimatedHours.value ?? null,
     })
     .select()
     .single()

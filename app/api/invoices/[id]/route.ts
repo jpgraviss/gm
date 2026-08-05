@@ -5,6 +5,9 @@ import { validate, validationError, INVOICE_STATUSES } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
+import { logActivity } from '@/lib/activity-log'
+import { onInvoicePaid } from '@/lib/delivery-sync'
+import { formatUsd } from '@/lib/format-currency'
 
 // PATCH updates invoice status/payment data
 export const PATCH = withErrorHandler('invoices/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
@@ -88,8 +91,26 @@ export const PATCH = withErrorHandler('invoices/[id] PATCH', async (req, { param
 
   if (body.status === 'Paid') {
     fireAutomations('invoice_paid', { invoiceId: id, ...data })
+    // Delivery step 2 ("Invoice & Payment") — mirrors the Stripe webhook,
+    // which is the other way an invoice reaches Paid. Awaited so it isn't
+    // lost to the serverless freeze-on-response.
+    await onInvoicePaid(data)
   } else if (body.status === 'Overdue') {
     fireAutomations('invoice_overdue', { invoiceId: id, ...data })
+  }
+
+  // Surface a real status change on the client's Activity timeline —
+  // Finance previously never wrote to crm_activities at all.
+  if (body.status !== undefined && body.status !== before?.status) {
+    logActivity({
+      type: 'invoice',
+      title: `Invoice ${String(body.status).toLowerCase()} — ${formatUsd(data.amount_paid ?? data.amount)}`,
+      body: `${data.service_type ?? 'General'}${before?.status ? ` · was ${before.status}` : ''}`,
+      companyId: data.company_id,
+      companyName: data.company,
+      userName: actor?.name || actor?.email || 'System',
+      outcome: body.status === 'Paid' ? 'success' : undefined,
+    })
   }
 
   return NextResponse.json(data)

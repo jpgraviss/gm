@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase'
 import { DEFAULT_WORKSPACE_ID } from '@/lib/workspace'
 import { getGSCSearchAnalytics } from '@/lib/google-search-console'
+import { fetchSerpPosition, isSerpConfigured } from '@/lib/serp-provider'
 
 export interface TrackedKeyword {
   id: string
@@ -141,7 +142,21 @@ async function fetchLatestPosition(
   siteUrl: string,
   keyword: string,
   country: string,
+  location?: string | null,
 ): Promise<number | null> {
+  // Prefer a real live-SERP lookup when one is configured — GSC reports its
+  // own average-position metric, needs the client's GSC connected, and
+  // can't see a keyword with zero impressions at all (see
+  // lib/serp-provider.ts). Falls through to GSC when no SERP key is set,
+  // so behavior is unchanged for anyone who hasn't opted into the cost.
+  const serp = await fetchSerpPosition({
+    keyword,
+    domain: siteUrl,
+    country,
+    location: location ?? undefined,
+  })
+  if (serp) return serp.position
+
   const end = new Date()
   const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000)
 
@@ -261,6 +276,7 @@ export async function checkKeyword(tracked: TrackedKeyword): Promise<number | nu
     tracked.siteUrl,
     tracked.keyword,
     tracked.country,
+    tracked.location,
   )
 
   const checkedAt = new Date().toISOString()
@@ -336,6 +352,17 @@ export async function checkAllRanks(batchSize = 25): Promise<{
     } catch (err) {
       failed += 1
       console.error('[rank-tracker] check failed for', row.id, err)
+      // Stamp the attempt even though it failed. checkKeyword() already does
+      // this when a lookup returns null, but not when it THROWS — and
+      // rankCheckDue() is "any keyword not checked today", so one keyword
+      // that throws every time would otherwise keep the daily gate open
+      // forever, re-running the whole rank + competitor sweep every 5
+      // minutes indefinitely. A failed attempt today is still an attempt
+      // today; the next run retries it tomorrow.
+      await db
+        .from('tracked_keywords')
+        .update({ last_checked_at: new Date().toISOString() })
+        .eq('id', row.id)
     }
   }
 
@@ -348,6 +375,99 @@ export async function checkAllRanks(batchSize = 25): Promise<{
     .select('id', { count: 'exact', head: true })
 
   return { checked: data?.length ?? 0, updated, failed, total: total ?? data?.length ?? 0 }
+}
+
+/**
+ * Record where each tracked competitor currently ranks for each tracked
+ * keyword. Nothing ever wrote `competitor_rank_snapshots` before this —
+ * the Competitors tab collected domains and then had no data source, so it
+ * was permanently empty. Competitor ranking is structurally impossible via
+ * Google Search Console (it only reports properties you own), which is why
+ * this requires the SERP provider and no-ops without it.
+ */
+export async function checkCompetitorRanks(maxLookups = 50): Promise<{
+  checked: number
+  recorded: number
+  skipped: boolean
+}> {
+  if (!(await isSerpConfigured())) {
+    // Not an error — just nothing we can honestly measure without a SERP
+    // source. The UI already tells staff the Competitors tab needs one.
+    return { checked: 0, recorded: 0, skipped: true }
+  }
+
+  const db = createServiceClient()
+  const [{ data: competitors }, { data: keywords }] = await Promise.all([
+    db.from('rank_tracker_competitors').select('*'),
+    db.from('tracked_keywords').select('*').order('last_checked_at', { ascending: true, nullsFirst: true }),
+  ])
+
+  const checkedAt = new Date().toISOString()
+  const todayStart = new Date()
+  todayStart.setUTCHours(0, 0, 0, 0)
+
+  // Which pairs already have a snapshot today. Without this, the caller's
+  // `rankCheckDue()` gate is not enough: it stays true all day while
+  // checkAllRanks() clears only 25 keywords per tick, so every 5-minute tick
+  // re-ran the SAME first `maxLookups` pairs — billable SERP calls plus
+  // duplicate same-day rows — while pairs past the cap were never reached.
+  // Skipping already-done pairs makes the budget advance through the backlog
+  // instead of spinning on its head.
+  const doneToday = new Set<string>()
+  const { data: todaysSnapshots } = await db
+    .from('competitor_rank_snapshots')
+    .select('competitor_id, tracked_keyword_id')
+    .gte('checked_at', todayStart.toISOString())
+  for (const s of (todaysSnapshots ?? []) as Record<string, unknown>[]) {
+    doneToday.add(`${s.competitor_id}::${s.tracked_keyword_id}`)
+  }
+
+  let checked = 0
+  let recorded = 0
+
+  outer:
+  for (const competitor of (competitors ?? []) as Record<string, unknown>[]) {
+    for (const kw of (keywords ?? []) as Record<string, unknown>[]) {
+      // Only compare a competitor against keywords for the same client.
+      // Strict equality including null: a competitor row with no company_id
+      // (the column is nullable and nothing enforces it) used to be scored
+      // against EVERY client's keywords, burning the per-run budget and
+      // writing cross-client noise into the Competitors chart.
+      if ((competitor.company_id ?? null) !== (kw.company_id ?? null)) continue
+      if (doneToday.has(`${competitor.id}::${kw.id}`)) continue
+      // Hard cap: each lookup is a billable SERP call.
+      if (checked >= maxLookups) break outer
+
+      checked += 1
+      const serp = await fetchSerpPosition({
+        keyword: String(kw.keyword),
+        domain: String(competitor.domain ?? ''),
+        country: String(kw.country ?? 'US'),
+        location: (kw.location as string) ?? undefined,
+      })
+      // null means the lookup itself failed — don't record a false
+      // "not ranking" that would show as a real data point on the chart.
+      if (!serp) continue
+
+      const { error } = await db.from('competitor_rank_snapshots').insert({
+        id:                 newId('crs'),
+        workspace_id:       DEFAULT_WORKSPACE_ID,
+        competitor_id:      competitor.id,
+        tracked_keyword_id: kw.id,
+        position:           serp.position,
+        url:                serp.url ?? null,
+        checked_at:         checkedAt,
+      })
+      doneToday.add(`${competitor.id}::${kw.id}`)
+      if (error) {
+        console.error('[rank-tracker] competitor snapshot insert failed', error.message)
+        continue
+      }
+      recorded += 1
+    }
+  }
+
+  return { checked, recorded, skipped: false }
 }
 
 export async function getKeywordHistory(

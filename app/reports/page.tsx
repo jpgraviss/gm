@@ -19,6 +19,7 @@ const DEEP_DIVE_REPORTS = [
 import type { Deal, Invoice, Project, Renewal, RevenueMonth, MaintenanceRecord, TeamMember, Contract } from '@/lib/types'
 import { fetchTeamMembers } from '@/lib/supabase'
 import { computeMRR, computeARR } from '@/lib/metrics'
+import { aggregateServiceRevenue } from '@/lib/deal-reporting'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 
 type DateRange = '3M' | '6M' | '12M' | 'Custom'
@@ -208,22 +209,19 @@ export default function ReportsPage() {
 
   const repStats = repFilter === 'All' ? allRepStats : allRepStats.filter(r => r.name === repFilter)
 
-  const serviceRevenue = useMemo(() => {
-    const svcMap: Record<string, { revenue: number; deals: number }> = {}
-    normalizedDeals.forEach(d => {
-      if (!svcMap[d.serviceType]) svcMap[d.serviceType] = { revenue: 0, deals: 0 }
-      svcMap[d.serviceType].revenue += d.value
-      svcMap[d.serviceType].deals++
-    })
-    return Object.entries(svcMap)
-      .map(([service, data]) => ({
-        service,
-        revenue: data.revenue,
-        deals: data.deals,
-        color: SERVICE_COLORS[service] ?? '#9ca3af',
-      }))
-      .sort((a, b) => b.revenue - a.revenue)
-  }, [normalizedDeals])
+  // AUDIT #719 — aggregateServiceRevenue (lib/deal-reporting.ts) takes two
+  // paths: a deal WITH line items has its value split across services by each
+  // line item's own amount (so "$25.5K SEO + $57K Web Design" no longer credits
+  // the whole $82.5K to whichever service was added first), while a deal with
+  // NO line items keeps the legacy behavior of the full value landing on its
+  // single serviceType. Only the color is layered on here.
+  const serviceRevenue = useMemo(
+    () => aggregateServiceRevenue(normalizedDeals).map(s => ({
+      ...s,
+      color: SERVICE_COLORS[s.service] ?? '#9ca3af',
+    })),
+    [normalizedDeals],
+  )
   const maxService = Math.max(...serviceRevenue.map(s => s.revenue), 1)
 
   if (loading) return <LoadingScreen />

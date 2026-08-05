@@ -1,10 +1,11 @@
 'use client'
 
 import { useState } from 'react'
-import { X, DollarSign, User, Calendar, TrendingUp, ChevronLeft } from 'lucide-react'
+import { X, User, Calendar, TrendingUp, ChevronLeft } from 'lucide-react'
 import { useTeamMembers } from '@/lib/useTeamMembers'
 import CompanySelect from '@/components/ui/CompanySelect'
-import type { ServiceType } from '@/lib/types'
+import DealLineItemsEditor from './DealLineItemsEditor'
+import type { DealLineItem } from '@/lib/types'
 import { SERVICE_NAMES } from '@/lib/services'
 
 export interface NewDealData {
@@ -14,10 +15,12 @@ export interface NewDealData {
   contactTitle: string
   contactEmail: string
   contactPhone: string
-  serviceType: ServiceType
-  serviceTypes?: ServiceType[]
+  // Source of truth for the deal's value and service types — see
+  // lib/deal-line-items.ts. The server derives `value`/`serviceTypes` from
+  // these on save, so a deal pitched as multiple products at different
+  // rates (one-time + recurring) is never squeezed into one number.
+  lineItems: DealLineItem[]
   stage: string
-  value: string
   closeDate: string
   assignedRep: string
   probability: string
@@ -25,7 +28,6 @@ export interface NewDealData {
   pipelineId?: string
 }
 
-const SERVICE_TYPES: ServiceType[] = [...SERVICE_NAMES]
 const DEFAULT_STAGES = ['Lead', 'Qualified', 'Proposal Sent', 'Contract Sent', 'Closed Won', 'Closed Lost']
 const DEFAULT_STAGE_PROBS: Record<string, string> = {
   Lead: '20',
@@ -65,30 +67,34 @@ interface Props {
   onClose: () => void
   stages?: { name: string; probability: number }[]
   pipelineId?: string
+  // Pre-fills company when opened from a company's own page (e.g. the
+  // Companies page's Deals tab) so the user doesn't have to re-select a
+  // company they're already looking at.
+  initialCompany?: string
+  initialCompanyId?: string
 }
 
-export default function NewDealPanel({ onSave, onClose, stages, pipelineId }: Props) {
+export default function NewDealPanel({ onSave, onClose, stages, pipelineId, initialCompany, initialCompanyId }: Props) {
   const REPS = useTeamMembers()
   const stageNames = stages?.map(s => s.name) ?? DEFAULT_STAGES
   const stageProbs: Record<string, string> = stages
     ? Object.fromEntries(stages.map(s => [s.name, String(s.probability)]))
     : DEFAULT_STAGE_PROBS
-  const [form, setForm] = useState<NewDealData>({
-    company: '',
+  const [form, setForm] = useState<NewDealData>(() => ({
+    company: initialCompany ?? '',
+    companyId: initialCompanyId,
     contactName: '',
     contactTitle: '',
     contactEmail: '',
     contactPhone: '',
-    serviceType: 'Website Build',
-    serviceTypes: [],
+    lineItems: [{ id: `li-${Date.now()}`, serviceType: SERVICE_NAMES[0], billingType: 'one-time', amount: 0 }],
     stage: stageNames[0] ?? 'Lead',
-    value: '',
     closeDate: '',
     assignedRep: REPS[0] ?? '',
     probability: stageProbs[stageNames[0] ?? 'Lead'] ?? '20',
     notes: '',
     pipelineId,
-  })
+  }))
 
   function set(field: keyof NewDealData, value: string) {
     setForm(prev => ({
@@ -98,7 +104,8 @@ export default function NewDealPanel({ onSave, onClose, stages, pipelineId }: Pr
     }))
   }
 
-  const canSave = form.company.trim() && form.contactName.trim() && form.value && form.closeDate
+  const hasLineItemValue = form.lineItems.some(item => item.amount > 0)
+  const canSave = form.company.trim() && form.contactName.trim() && hasLineItemValue && form.closeDate
 
   return (
     <div className="fixed inset-0 z-50 flex pointer-events-none">
@@ -145,58 +152,24 @@ export default function NewDealPanel({ onSave, onClose, stages, pipelineId }: Pr
             </div>
           </div>
 
-          {/* Service Types + Stage */}
-          <div className="flex flex-col gap-3">
-            <div>
-              <FieldLabel>Service Types</FieldLabel>
-              <div className="flex flex-wrap gap-2 p-2.5 border border-gray-200 rounded-xl bg-white">
-                {SERVICE_TYPES.map(s => {
-                  const selected = (form.serviceTypes ?? []).includes(s)
-                  return (
-                    <button
-                      key={s}
-                      type="button"
-                      onClick={() => {
-                        const current = form.serviceTypes ?? []
-                        const next = selected ? current.filter(t => t !== s) : [...current, s]
-                        setForm(prev => ({
-                          ...prev,
-                          serviceTypes: next as ServiceType[],
-                          serviceType: (next[0] ?? prev.serviceType) as ServiceType,
-                        }))
-                      }}
-                      className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-all ${
-                        selected
-                          ? 'bg-emerald-50 border-emerald-300 text-emerald-700'
-                          : 'bg-white border-gray-200 text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      {selected && <span className="mr-1">&#10003;</span>}
-                      {s}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+          {/* Line items — product/service + rate + one-time/recurring,
+              instead of one opaque Deal Value number. Service types and the
+              total deal value are both derived from these on save. */}
+          <div>
+            <FieldLabel>Products / Services</FieldLabel>
+            <DealLineItemsEditor
+              items={form.lineItems}
+              onChange={lineItems => setForm(prev => ({ ...prev, lineItems }))}
+            />
+          </div>
+
+          {/* Stage + Probability */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <FieldLabel>Stage</FieldLabel>
               <Select value={form.stage} onChange={e => set('stage', e.target.value)}>
                 {stageNames.map(s => <option key={s} value={s}>{s}</option>)}
               </Select>
-            </div>
-          </div>
-
-          {/* Value + Probability */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <FieldLabel><span className="flex items-center gap-1"><DollarSign size={11} />Deal Value</span></FieldLabel>
-              <Input
-                type="number"
-                placeholder="0"
-                min="0"
-                value={form.value}
-                onChange={e => set('value', e.target.value)}
-              />
             </div>
             <div>
               <FieldLabel><span className="flex items-center gap-1"><TrendingUp size={11} />Probability %</span></FieldLabel>

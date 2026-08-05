@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
+import { generateRecurringInvoices } from '@/lib/recurring-billing'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { checkSite, recordCheck, computeUptime30d, type MonitoredSiteRow } from '@/lib/uptime'
-import { checkAllRanks, sendDueScheduledReports } from '@/lib/rank-tracker'
+import { checkAllRanks, checkCompetitorRanks, sendDueScheduledReports } from '@/lib/rank-tracker'
 import { publishSocialPost } from '@/lib/social-publish'
 import { processScheduledEmails, rescueStuckSendingEmails } from '@/lib/email-scheduler'
 import { sendMonthlyClientReports, seoReportsDue } from '@/lib/seo-report-sender'
@@ -140,8 +141,10 @@ export const GET = withErrorHandler('cron GET', async (req) => {
   //    so running more than once/day is wasted quota. We detect "already ran
   //    today" by checking whether the most-recently-checked tracked keyword
   //    was updated during the current UTC date.
+  let rankCheckWasDue = false
   try {
-    if (await rankCheckDue()) {
+    rankCheckWasDue = await rankCheckDue()
+    if (rankCheckWasDue) {
       results.rankTracker = await checkAllRanks()
     } else {
       results.rankTracker = { skipped: true }
@@ -149,6 +152,22 @@ export const GET = withErrorHandler('cron GET', async (req) => {
   } catch (err) {
     console.error('[cron] Rank tracker failed:', err)
     results.rankTracker = { error: 'Failed' }
+  }
+
+  // 6a. Competitor ranking — needs a live SERP source (GSC only reports
+  //     properties you own), so it no-ops cleanly when one isn't
+  //     configured. Deliberately its OWN try/catch rather than sharing the
+  //     rank-tracker block above: this route's whole design is per-job
+  //     isolation, and nesting these meant a competitor-lookup failure also
+  //     wiped out the keyword-rank result. Always reports a status so the
+  //     response shape doesn't vary between runs.
+  try {
+    results.competitorRanks = rankCheckWasDue
+      ? await checkCompetitorRanks()
+      : { skipped: true }
+  } catch (err) {
+    console.error('[cron] Competitor rank check failed:', err)
+    results.competitorRanks = { error: 'Failed' }
   }
 
   // 6b. Rescue scheduled_emails rows left stuck in 'sending' — the pending
@@ -161,6 +180,16 @@ export const GET = withErrorHandler('cron GET', async (req) => {
   //     recovery below. Run before processScheduledEmails so a rescued row
   //     is immediately eligible for (re)claim in the same tick instead of
   //     waiting for the next one.
+  // Recurring (retainer) billing — with ~30 real contract clients, every
+  // invoice previously had to be manually recreated each period. Idempotent
+  // per billing period, so the 5-minute cron ping can't mint duplicates.
+  try {
+    results.recurringBilling = await generateRecurringInvoices()
+  } catch (err) {
+    console.error('[cron] recurring billing failed:', err)
+    results.recurringBilling = { error: 'Failed' }
+  }
+
   try {
     results.rescuedScheduledEmails = await rescueStuckSendingEmails()
   } catch (err) {

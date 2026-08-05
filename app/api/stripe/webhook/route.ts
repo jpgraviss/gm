@@ -3,6 +3,7 @@ import Stripe from 'stripe'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { fireAutomations } from '@/lib/automations-engine'
+import { onInvoicePaid } from '@/lib/delivery-sync'
 import { getStripeSecretKey, getStripeWebhookSecret, constructWebhookEvent } from '@/lib/stripe'
 
 // POST /api/stripe/webhook — public (see proxy.ts PUBLIC_PREFIXES), no
@@ -58,11 +59,24 @@ export const POST = withErrorHandler('stripe/webhook POST', async (req: NextRequ
         })
         .eq('id', invoiceId)
         .neq('status', 'Paid')
+        // Also excludes Cancelled — the checkout route now refuses to
+        // generate a session for a cancelled invoice, but this guards
+        // against a session created before that fix, or one still open in
+        // a stale browser tab, from silently flipping Cancelled → Paid and
+        // recording a charge no one expects to reconcile against.
+        .neq('status', 'Cancelled')
         .select()
         .maybeSingle()
 
       if (claimed) {
         fireAutomations('invoice_paid', { invoiceId, ...claimed })
+        // Delivery step 2 ("Invoice & Payment"). Inside the atomic-claim
+        // branch on purpose, so a redelivered webhook doesn't re-log the
+        // step event; advanceDeliveryStep is separately idempotent anyway.
+        // Awaited — a webhook handler can afford the round trip, and an
+        // un-awaited write is routinely dropped when the serverless
+        // instance freezes on response.
+        await onInvoicePaid(claimed)
       } else {
         // AUDIT — the atomic claim above correctly stops a second
         // completed-session event from double-firing invoice_paid or

@@ -61,6 +61,27 @@ export function validationError(message: string) {
   return NextResponse.json({ error: message }, { status: 400 })
 }
 
+/**
+ * Parser for an optional, nullable, non-negative numeric field (e.g.
+ * projects.budget_amount / projects.estimated_hours).
+ *
+ * Accepts a number or a numeric string (what an <input> yields). `null` and
+ * `''` mean "clear it" and map to SQL NULL — the "not tracked" state, which
+ * is deliberately distinct from 0 ("explicitly zero"). `undefined` means the
+ * caller never mentioned the field, so it must be left untouched rather than
+ * nulled. Anything else is rejected rather than silently coerced or dropped,
+ * so a typo'd budget can't quietly vanish on save.
+ */
+export function parseNullableNumber(
+  value: unknown,
+): { ok: true; value: number | null | undefined } | { ok: false } {
+  if (value === undefined) return { ok: true, value: undefined }
+  if (value === null || value === '') return { ok: true, value: null }
+  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
+  if (!Number.isFinite(n) || n < 0) return { ok: false }
+  return { ok: true, value: n }
+}
+
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 export const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 export const SLUG_PATTERN = /^[a-z0-9-]+$/

@@ -4,6 +4,8 @@ import { createServiceClient } from '@/lib/supabase'
 import crypto from 'crypto'
 import { logAudit } from '@/lib/audit'
 import { computeContractDocumentHash } from '@/lib/contract-hash'
+import { fireAutomations } from '@/lib/automations-engine'
+import { onContractFullyExecuted } from '@/lib/delivery-sync'
 
 export const GET = withErrorHandler('signatures/[token] GET', async (
   _req,
@@ -95,7 +97,7 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
   // signer's service type, so this is the single fetch for both purposes.
   const { data: contract } = await db
     .from('contracts')
-    .select('company, value, service_type, items, notes, start_date, end_date')
+    .select('company, value, service_type, items, notes, start_date, end_date, status')
     .eq('id', sigReq.contract_id)
     .single()
 
@@ -218,7 +220,16 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
     }
   }
 
-  // Check if both client and internal signatures are done for this contract
+  // Check if both client and internal signatures are done for this contract.
+  // AUDIT #691 — if the contract was independently moved to a terminal state
+  // (Terminated/Expired) after this sign link went out, a client completing
+  // a still-pending signature shouldn't be able to push it back to Fully
+  // Executed / Countersign Needed, bypassing the transition graph
+  // app/api/contracts/[id]/route.ts's VALID_TRANSITIONS enforces everywhere
+  // else. Not importing that map here (it's a local, unexported PATCH-route
+  // concern) — a plain terminal-state check covers the real risk.
+  const contractIsTerminal = contract?.status === 'Terminated' || contract?.status === 'Expired'
+
   const { data: allSigs } = await db
     .from('signature_requests')
     .select('type, status')
@@ -227,10 +238,10 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
   const clientSigned = allSigs?.some(s => s.type === 'client' && s.status === 'signed')
   const internalSigned = allSigs?.some(s => s.type === 'internal' && s.status === 'signed')
 
-  if (clientSigned && internalSigned) {
+  if (!contractIsTerminal && clientSigned && internalSigned) {
     // Both signed — update contract to Fully Executed
     const today = new Date().toISOString().split('T')[0]
-    await db
+    const { data: executedContract } = await db
       .from('contracts')
       .update({
         status: 'Fully Executed',
@@ -238,7 +249,25 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
         internal_signed: today,
       })
       .eq('id', sigReq.contract_id)
-  } else if (clientSigned) {
+      .select()
+      .maybeSingle()
+
+    // AUDIT #691 — this is the real, intended path a contract gets fully
+    // executed through (a client signing via /sign/[token]), but unlike the
+    // staff-manual-status-change path in app/api/contracts/[id]/route.ts,
+    // this route never fired the 'contract_executed' automation trigger —
+    // any automation built on "Contract Fully Executed" (auto-create
+    // project, onboarding notification, etc.) silently never ran for a
+    // genuinely-signed contract. Mirrors the PATCH route's own call.
+    if (executedContract) {
+      fireAutomations('contract_executed', { contractId: sigReq.contract_id, ...executedContract })
+      // Delivery step 1 ("Contract Signed") used to sit Pending until a
+      // staff member remembered to tick it on the Delivery dashboard — even
+      // though this is the exact moment the app learns the contract is
+      // signed, and the client sees that same step on /client/workflow.
+      await onContractFullyExecuted(executedContract)
+    }
+  } else if (!contractIsTerminal && clientSigned) {
     // Only client signed — countersign needed
     const today = new Date().toISOString().split('T')[0]
     await db
@@ -248,7 +277,7 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
         client_signed: today,
       })
       .eq('id', sigReq.contract_id)
-  } else if (internalSigned) {
+  } else if (!contractIsTerminal && internalSigned) {
     // Only internal signed
     const today = new Date().toISOString().split('T')[0]
     await db

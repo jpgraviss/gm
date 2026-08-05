@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
+import { onContractFullyExecuted } from '@/lib/delivery-sync'
 import { validate, validationError, CONTRACT_STATUSES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
@@ -214,6 +215,11 @@ export const PATCH = withErrorHandler('contracts/[id] PATCH', async (req, { para
 
   if (body.status === 'Fully Executed') {
     fireAutomations('contract_executed', { contractId: id, ...data })
+    // Mirrors app/api/signatures/[token]/route.ts — the two paths a
+    // contract can reach Fully Executed through must advance delivery
+    // step 1 identically, or which one a client happened to use would
+    // decide whether their onboarding board is accurate.
+    await onContractFullyExecuted(data)
   } else if (body.status === 'Sent') {
     fireAutomations('contract_sent', { contractId: id, ...data })
   }

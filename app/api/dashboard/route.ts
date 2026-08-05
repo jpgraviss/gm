@@ -30,7 +30,11 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
   // (pipelineValue, winRate, totalCollected, overdueInvoices, etc.), not a
   // paginated list, so it needs an explicit generous cap rather than relying
   // on the implicit default. Same convention as app/api/reports/attribution.
-  const [dealsRes, invoicesRes, contractsRes, renewalsRes, activityRes, automationsRes, activeClientsRes] = await Promise.all([
+  // Projects, tickets, and proposals were previously never queried here at
+  // all — the executive dashboard showed a finance/pipeline-only snapshot,
+  // so a company could have every ticket escalating and every project
+  // stalled and the first screen anyone sees on login showed nothing.
+  const [dealsRes, invoicesRes, contractsRes, renewalsRes, activityRes, automationsRes, activeClientsRes, projectsRes, ticketsRes, proposalsRes] = await Promise.all([
     db.from('deals').select('id,stage,value,company,assigned_rep,last_activity,service_type,close_date,created_at').order('created_at', { ascending: false }).limit(5000),
     db.from('invoices').select('id,company,amount,amount_paid,status,due_date,issued_date,paid_date,service_type,contract_id,created_at').order('created_at', { ascending: false }).limit(5000),
     db.from('contracts').select('id,company,status,value,renewal_date,service_type,assigned_rep,billing_structure,created_at').order('created_at', { ascending: false }).limit(5000),
@@ -38,6 +42,9 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
     db.from('audit_logs').select('*').order('created_at', { ascending: false }).limit(20),
     db.from('automations').select('id,name,status,runs').order('created_at', { ascending: false }).limit(10),
     db.from('crm_companies').select('id', { count: 'exact', head: true }).eq('status', 'Active Client'),
+    db.from('projects').select('id,company,status,service_type,progress,created_at').order('created_at', { ascending: false }).limit(5000),
+    db.from('tickets').select('id,company,subject,status,priority,assigned_to,created_date').order('created_date', { ascending: false }).limit(5000),
+    db.from('proposals').select('id,company,status,value,service_type,created_at').order('created_at', { ascending: false }).limit(5000),
   ])
 
   const deals     = dealsRes.data    ?? []
@@ -45,6 +52,21 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
   const contracts = contractsRes.data ?? []
   const renewals  = renewalsRes.data ?? []
   const auditLogs = activityRes.data ?? []
+  const projects  = projectsRes.data  ?? []
+  const tickets   = ticketsRes.data   ?? []
+  const proposals = proposalsRes.data ?? []
+
+  // Delivery + Support + outstanding-proposal health, so the home dashboard
+  // reflects the whole business rather than just money and pipeline.
+  const activeProjects  = projects.filter((p: { status: string }) => p.status !== 'Completed' && p.status !== 'Cancelled').length
+  const atRiskProjects  = projects.filter((p: { status: string }) => p.status === 'At Risk' || p.status === 'Blocked').length
+  const openTickets     = tickets.filter((t: { status: string }) => t.status !== 'Resolved' && t.status !== 'Closed').length
+  const urgentTickets   = tickets.filter((t: { status: string; priority: string }) =>
+    t.status !== 'Resolved' && t.status !== 'Closed' && (t.priority === 'Urgent' || t.priority === 'High')).length
+  const pendingProposals = proposals.filter((p: { status: string }) => p.status === 'Sent' || p.status === 'Viewed').length
+  const pendingProposalValue = proposals
+    .filter((p: { status: string }) => p.status === 'Sent' || p.status === 'Viewed')
+    .reduce((s: number, p: { value: number | null }) => s + (p.value ?? 0), 0)
 
   const activeClients   = activeClientsRes.count ?? 0
   const openDeals       = deals.filter(d => !d.stage.startsWith('Closed')).length
@@ -134,6 +156,7 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
       if (contract && contractMonthlyValue({
         value: Number(contract.value) || 0,
         billingStructure: (contract.billing_structure as string) ?? '',
+        serviceType: (contract.service_type as string) ?? null,
       }) > 0) {
         bucket.recurring += amount
       }
@@ -164,6 +187,14 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
         deals30d,
         contracts30d,
         invoices30d,
+        activeProjects,
+        atRiskProjects,
+        openTickets,
+        urgentTickets,
+        // Deliberately zeroed for the contractor view alongside every other
+        // financial figure above.
+        pendingProposals: 0,
+        pendingProposalValue: 0,
       },
       recentDeals: recentDeals.map((d: Record<string, unknown>) => ({ ...d, value: 0 })),
       recentContracts: recentContracts.map((c: Record<string, unknown>) => ({ ...c, value: 0 })),
@@ -180,6 +211,8 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
       totalCollected, totalInvoiced, totalOverdue, totalPending,
       winRate, avgDealSize, totalDealValue,
       deals30d, contracts30d, invoices30d,
+      activeProjects, atRiskProjects, openTickets, urgentTickets,
+      pendingProposals, pendingProposalValue,
     },
     recentDeals,
     recentContracts,

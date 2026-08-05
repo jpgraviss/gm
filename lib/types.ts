@@ -87,6 +87,25 @@ export interface Contact {
   title: string
 }
 
+// A single product/service pitched as part of a deal, with its own rate and
+// billing type — lets a deal like "$25.5K one-time (sales enablement) +
+// $57K recurring (6-month engagement)" be tracked as two real line items
+// instead of one opaque `value` number. `amount` is this line's own
+// contribution to the deal total (for a recurring line, the full value of
+// the engagement over `termMonths`, not a monthly rate — matches how a
+// deal's total pitched value is sized, unlike a signed contract's `value`,
+// which lib/metrics.ts documents as a per-billing-period amount because it
+// bills indefinitely post-signature).
+export interface DealLineItem {
+  id: string
+  serviceType: ServiceType
+  billingType: 'one-time' | 'recurring'
+  amount: number
+  /** Only meaningful when billingType === 'recurring'; informational
+   *  (amount / termMonths ≈ the monthly rate), not used to derive amount. */
+  termMonths?: number
+}
+
 export interface Deal {
   id: string
   company: string
@@ -95,6 +114,11 @@ export interface Deal {
   value: number
   serviceType: ServiceType
   serviceTypes?: ServiceType[]
+  /** When present, `value` and `serviceTypes` are derived from these
+   *  server-side — see lib/deal-line-items.ts. Optional/empty for deals
+   *  created before this existed, which keep working on the plain `value`
+   *  field alone. */
+  lineItems?: DealLineItem[]
   closeDate: string
   assignedRep: string
   probability: number
@@ -222,6 +246,10 @@ export interface Project {
   color?: string
   description?: string
   companyId?: string | null
+  // null = not tracked for this project (never 0 — see the projects mapper
+  // in app/api/projects/route.ts and the migration that adds these).
+  budgetAmount?: number | null
+  estimatedHours?: number | null
 }
 
 export interface MaintenanceRecord {
@@ -415,7 +443,7 @@ export interface SignatureRequest {
 
 export type CompanyStatus = 'Prospect' | 'Active Client' | 'Past Client' | 'Partner' | 'Churned'
 export type CompanySize = '1-10' | '11-50' | '51-200' | '201-500' | '501-1000' | '1001-5000' | '5001-10000' | '10001+' | '500+'
-export type ActivityType = 'call' | 'email' | 'meeting' | 'note' | 'call_note' | 'task' | 'deal' | 'contract' | 'invoice' | 'proposal'
+export type ActivityType = 'call' | 'email' | 'meeting' | 'note' | 'call_note' | 'task' | 'deal' | 'contract' | 'invoice' | 'proposal' | 'project' | 'ticket'
 export type ContactTaskType = 'follow_up' | 'call' | 'email' | 'meeting' | 'reschedule' | 'proposal' | 'demo' | 'other'
 export type ContactTaskPriority = 'high' | 'medium' | 'low'
 

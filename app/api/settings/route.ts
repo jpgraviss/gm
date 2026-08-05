@@ -16,6 +16,9 @@ const SETTINGS_ID = 'global'
 const ENCRYPTED_INTEGRATION_FIELDS: Record<string, string[]> = {
   hubspot: ['apiKey'],
   mercury: ['apiKey'],
+  // Live-SERP rank tracking (lib/serp-provider.ts) — optional; the rank
+  // tracker falls back to Google Search Console when unset.
+  serpapi: ['apiKey'],
   maverick: ['apiKey'],
   apollo: ['apiKey'],
   granola: ['apiKey'],
@@ -109,6 +112,7 @@ export const PATCH = withErrorHandler('settings PATCH', async (req) => {
   if (body.gsc_site_url         !== undefined) updates.gsc_site_url         = body.gsc_site_url
   if (body.gsc_last_sync        !== undefined) updates.gsc_last_sync        = body.gsc_last_sync
   if (body.mercury               !== undefined) updates.mercury  = transformSecretFields(body.mercury, ENCRYPTED_INTEGRATION_FIELDS.mercury, encrypt)
+  if (body.serpapi               !== undefined) updates.serpapi  = transformSecretFields(body.serpapi, ENCRYPTED_INTEGRATION_FIELDS.serpapi, encrypt)
   if (body.maverick              !== undefined) updates.maverick = transformSecretFields(body.maverick, ENCRYPTED_INTEGRATION_FIELDS.maverick, encrypt)
   if (body.apollo                !== undefined) updates.apollo   = transformSecretFields(body.apollo, ENCRYPTED_INTEGRATION_FIELDS.apollo, encrypt)
   if (body.trainingModules      !== undefined) updates.training_modules     = body.trainingModules

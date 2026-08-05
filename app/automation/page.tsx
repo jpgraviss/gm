@@ -49,7 +49,13 @@ const TRIGGER_OPTIONS = [
 // "Notify Client" were removed — they had no implementation and silently
 // no-op'd (hit the switch's default case), including inside 3 of the
 // built-in templates below.
+// Must stay in sync with the `switch (action)` in lib/automations-engine.ts —
+// an option listed here that the engine has no case for saves fine and then
+// silently does nothing. `Create Invoice`/`Send Invoice` were reachable only
+// from the visual builder until now, so this page's dropdown couldn't express
+// the two actions the billing templates depend on.
 const ACTION_OPTIONS = [
+  'Create Invoice', 'Send Invoice',
   'Create Draft Contract', 'Create Billing Task', 'Create Project Record',
   'Create Maintenance Record', 'Create Renewal Task', 'Notify Sales Rep',
   'Notify Finance Team', 'Notify Delivery Team', 'Notify Assigned Rep',
@@ -87,10 +93,22 @@ const AUTOMATION_TEMPLATES: AutomationTemplate[] = [
   {
     id: 'invoice_overdue_reminder',
     name: 'Invoice Overdue Reminder',
-    description: 'Send a reminder email when an invoice is overdue.',
+    description: "Re-send the invoice — with its amount, due date and payment link — to the client's billing contact when it goes overdue.",
     icon: <Clock size={20} />,
     trigger: 'Invoice Overdue',
-    actions: ['Send Email Reminder'],
+    // Was 'Send Email Reminder', which resolves its recipient through
+    // `crm_contacts` and sends a generic templated body: no amount, no due
+    // date, no payment link — and nothing at all if the company happens to
+    // have no CRM contact with an email, since that action breaks silently.
+    // The one template the app ships for chasing money was therefore either
+    // sending a content-free nudge to whoever happened to be the CRM contact,
+    // or nothing. 'Send Invoice' resolves the actual billing contact from
+    // `portal_clients` and includes the real figures and a live Stripe link.
+    actions: ['Send Invoice'],
+    // Paused on creation, unlike the other templates: this one emails a
+    // client about money with no further human step. The operator should see
+    // it before it can fire on its own.
+    defaultStatus: 'Paused',
   },
   {
     id: 'contract_expiring_soon',

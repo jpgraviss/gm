@@ -4,6 +4,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { buildSessionCookie, sessionTimeoutToSeconds, type SessionPayload } from '@/lib/session-cookie'
 import { getSecuritySettings } from '@/lib/settings'
 import { isLockedOut, recordFailedAttempt, clearAttempts } from '@/lib/login-attempts'
+import { onPortalFirstLogin } from '@/lib/delivery-sync'
 
 async function respondWithUser(user: SessionPayload & { name: string; unit: string; initials: string; avatar?: string; company?: string }) {
   const res = NextResponse.json({ user })
@@ -124,7 +125,7 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   // emails resolve to a real account can be probed — lock out further
   // attempts against one email after repeated "no account found" hits.
   const security = await getSecuritySettings()
-  if (isLockedOut(email, security.loginAttempts)) {
+  if (await isLockedOut(email, security.loginAttempts)) {
     return NextResponse.json(
       { error: 'Too many failed attempts for this account. Please wait 30 minutes and try again.' },
       { status: 429 },
@@ -176,7 +177,7 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
       }
     }
 
-    clearAttempts(email)
+    await clearAttempts(email)
 
     // Product decision: Google Sign-In is exempt from "Two-Factor Auth:
     // Required" — Google's own sign-in already requires the user to
@@ -262,7 +263,7 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   // ── 3. Check portal_clients (external clients) ──
   const { data: clientRow, error: clientErr } = await db
     .from('portal_clients')
-    .select('id, email, company, contact, service, access, pending_approval')
+    .select('id, email, company, company_id, contact, service, access, pending_approval, last_login')
     .ilike('email', email)
     .maybeSingle()
 
@@ -271,14 +272,14 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   }
 
   if (!clientRow) {
-    recordFailedAttempt(email)
+    await recordFailedAttempt(email)
     return NextResponse.json(
       { error: `No account found for ${email}. Contact Graviss Marketing to get access.` },
       { status: 403 },
     )
   }
 
-  clearAttempts(email)
+  await clearAttempts(email)
 
   if (clientRow.access === 'Disabled') {
     return NextResponse.json(
@@ -298,6 +299,12 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
       { error: 'Your portal access is awaiting admin approval. You will receive an email once approved.' },
       { status: 403 },
     )
+  }
+
+  // Delivery step 4 ("Portal Access") — see the matching call in
+  // app/api/auth/session/route.ts for why this is gated and awaited.
+  if (!clientRow.last_login || clientRow.last_login === 'Never') {
+    await onPortalFirstLogin(clientRow)
   }
 
   const names = (clientRow.contact ?? '').split(' ')

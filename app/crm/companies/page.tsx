@@ -5,10 +5,11 @@ import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { useTeamMembers } from '@/lib/useTeamMembers'
-import { fetchCrmCompanies, fetchCrmContacts, fetchDeals, fetchContracts, fetchInvoices, fetchProjects, fetchCrmActivities } from '@/lib/supabase'
+import { fetchCrmCompanies, fetchCrmContacts, fetchDeals, fetchContracts, fetchInvoices, fetchProjects, fetchCrmActivities, fetchProposals } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   formatCurrency, stageColors, serviceTypeColors, contractStatusColors,
-  projectStatusColors, invoiceStatusColors, aiSourceLabel,
+  projectStatusColors, invoiceStatusColors, aiSourceLabel, proposalStatusColors,
 } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
 import { InfoRow, ActivityTimeline } from '@/components/crm/activityUtils'
@@ -17,11 +18,36 @@ import NewCompanyPanel, { type NewCompanyFormData } from '@/components/crm/NewCo
 import HubSpotImportPanel from '@/components/crm/HubSpotImportPanel'
 import NewContactPanel, { type NewContactFormData } from '@/components/crm/NewContactPanel'
 import NewProposalPanel, { type NewProposalFormData } from '@/components/crm/NewProposalPanel'
+import NewDealPanel, { type NewDealData } from '@/components/crm/NewDealPanel'
+import NewContractPanel, { type NewContractFormData } from '@/components/crm/NewContractPanel'
 import AiInsightsPanel from '@/components/crm/AiInsightsPanel'
-import type { CRMCompany, CRMContact, CompanyStatus, Deal, Contract, Invoice, Project, CRMActivity, AppTask } from '@/lib/types'
+import type { CRMCompany, CRMContact, CompanyStatus, Deal, Contract, Invoice, Project, CRMActivity, AppTask, Proposal } from '@/lib/types'
+
+// Tickets have no shared type in lib/types.ts (the full interface lives in
+// app/tickets/page.tsx) — this is the subset the company panel's Tickets
+// tab actually renders, matching lib/tickets.ts's mapTicket() output.
+interface CompanyTicket {
+  id: string
+  subject: string
+  company: string
+  companyId?: string | null
+  status: string
+  priority: string
+  assignedTo?: string
+  createdDate: string
+}
+
+const ticketStatusColors: Record<string, string> = {
+  'Open':               'bg-blue-50 text-blue-700',
+  'In Progress':        'bg-amber-50 text-amber-700',
+  'Waiting on Client':  'bg-purple-50 text-purple-700',
+  'Resolved':           'bg-emerald-50 text-emerald-700',
+  'Closed':             'bg-gray-100 text-gray-600',
+}
 import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
 import { downloadCsv } from '@/lib/csv-export'
+import { filterByCompany } from '@/lib/company-match'
 import {
   X, Phone, Mail, Building2, MapPin, Users, Globe, DollarSign,
   User, Filter, Search, Plus, FileText, ScrollText, ChevronRight, ChevronLeft,
@@ -508,14 +534,16 @@ function DriveImportModal({ companyId, onClose, onImported }: { companyId: strin
 
 // ─── Company Detail Panel ─────────────────────────────────────────────────────
 
-function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, crmContacts, deals, contracts, invoices, projects, crmActivities }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void; onOpenIntegrations?: () => void; crmContacts: CRMContact[]; deals: Deal[]; contracts: Contract[]; invoices: Invoice[]; projects: Project[]; crmActivities: CRMActivity[] }) {
+function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, crmContacts, deals, contracts, invoices, projects, proposals, tickets, crmActivities }: { company: CRMCompany; onClose: () => void; onEdit?: () => void; onDelete?: () => void; onOpenIntegrations?: () => void; crmContacts: CRMContact[]; deals: Deal[]; contracts: Contract[]; invoices: Invoice[]; projects: Project[]; proposals: Proposal[]; tickets: CompanyTicket[]; crmActivities: CRMActivity[] }) {
   const { toast } = useToast()
   const { user } = useAuth()
   const router = useRouter()
-  const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'contracts' | 'files' | 'activity' | 'tasks'>('overview')
+  const [tab, setTab] = useState<'overview' | 'contacts' | 'deals' | 'proposals' | 'contracts' | 'invoices' | 'projects' | 'tickets' | 'files' | 'activity' | 'tasks'>('overview')
   const [loggingActivity, setLoggingActivity] = useState(false)
   const [addingContact, setAddingContact] = useState(false)
   const [creatingProposal, setCreatingProposal] = useState(false)
+  const [creatingDeal, setCreatingDeal] = useState(false)
+  const [creatingContract, setCreatingContract] = useState(false)
   const [extraContacts, setExtraContacts] = useState<CRMContact[]>([])
   const [localTags, setLocalTags] = useState<string[]>(company.tags)
   const [newTag, setNewTag] = useState('')
@@ -528,6 +556,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   const [socialOpen, setSocialOpen] = useState(false)
   const [companyRecs, setCompanyRecs] = useState<{ type: string; priority: string; title: string; description: string; suggestedAction: string }[]>([])
   const [recsLoading, setRecsLoading] = useState(false)
+  const [recsSource, setRecsSource] = useState<'ai' | 'fallback'>('ai')
   const [recsOpen, setRecsOpen] = useState(false)
   const [aiGenerating, setAiGenerating] = useState(false)
   const [aiProposalContent, setAiProposalContent] = useState<string | null>(null)
@@ -789,10 +818,17 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
   const draftRecipient = companyContacts.find(c => c.id === aiDraftRecipientId)
     ?? companyContacts.find(c => c.isPrimary)
     ?? companyContacts[0]
-  const companyDeals = deals.filter(d => d.company === company.name)
-  const companyContracts = contracts.filter(c => c.company === company.name)
-  const companyInvoices = invoices.filter(i => i.company === company.name)
-  const companyProject = projects.find(p => p.company === company.name)
+  // Keyed off the real company_id FK (with a normalized-name fallback for
+  // legacy un-backfilled rows) — these four used to be exact-name-string
+  // matches, so a rename or an import typo silently dropped a company's own
+  // deals/contracts/invoices/projects off its own page. See lib/company-match.ts.
+  const companyDeals = filterByCompany(deals, company.id, company.name)
+  const companyContracts = filterByCompany(contracts, company.id, company.name)
+  const companyInvoices = filterByCompany(invoices, company.id, company.name)
+  const companyProposals = filterByCompany(proposals, company.id, company.name)
+  const companyTickets = filterByCompany(tickets, company.id, company.name)
+  const companyProjects = filterByCompany(projects, company.id, company.name)
+  const companyProject = companyProjects[0]
 
   const totalInvoiced = companyInvoices.reduce((s, i) => s + i.amount, 0)
   const totalPaid = companyInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + i.amount, 0)
@@ -878,7 +914,7 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
 
         {/* Tabs */}
         <div className="flex gap-1 px-4 pt-3 pb-1 border-b border-gray-100 flex-shrink-0 overflow-x-auto">
-          {(['overview', 'contacts', 'deals', 'contracts', 'files', 'activity', 'tasks'] as const).map(t => (
+          {(['overview', 'contacts', 'deals', 'proposals', 'contracts', 'invoices', 'projects', 'tickets', 'files', 'activity', 'tasks'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)} className={`tab-btn capitalize flex-shrink-0 ${tab === t ? 'active' : ''}`}>{t}</button>
           ))}
         </div>
@@ -974,8 +1010,18 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                       setRecsOpen(true)
                       setRecsLoading(true)
                       fetch(`/api/ai/recommendations?companyId=${company.id}`)
-                        .then(r => r.ok ? r.json() : [])
-                        .then(data => { if (Array.isArray(data)) setCompanyRecs(data) })
+                        .then(r => r.ok ? r.json() : null)
+                        .then(data => {
+                          // AUDIT #709 — the response now carries `source`,
+                          // so a rule-based fallback (every AI provider
+                          // unreachable) is labeled rather than rendered as
+                          // if it were real model output.
+                          if (Array.isArray(data)) { setCompanyRecs(data); return }
+                          if (Array.isArray(data?.recommendations)) {
+                            setCompanyRecs(data.recommendations)
+                            setRecsSource(data.source === 'ai' ? 'ai' : 'fallback')
+                          }
+                        })
                         .catch(() => {})
                         .finally(() => setRecsLoading(false))
                     } else {
@@ -987,6 +1033,11 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
                   <div className="flex items-center gap-2">
                     <Brain size={14} className="text-purple-600" />
                     <span className="text-sm font-semibold text-purple-800">AI Recommendations</span>
+                    {recsSource === 'fallback' && companyRecs.length > 0 && (
+                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 uppercase tracking-wide">
+                        Rule-based
+                      </span>
+                    )}
                   </div>
                   <ChevronRight size={14} className={`text-purple-600 transition-transform ${recsOpen ? 'rotate-90' : ''}`} />
                 </button>
@@ -1304,12 +1355,20 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               {companyDeals.length === 0 && (
                 <p className="text-sm text-gray-400 text-center py-8">No deals linked to this company.</p>
               )}
-              <button
-                onClick={() => setCreatingProposal(true)}
-                className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
-              >
-                <Plus size={14} /> New Proposal
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setCreatingDeal(true)}
+                  className="py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} /> New Deal
+                </button>
+                <button
+                  onClick={() => setCreatingProposal(true)}
+                  className="py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={14} /> New Proposal
+                </button>
+              </div>
             </div>
           )}
 
@@ -1365,6 +1424,136 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               ))}
               {companyContracts.length === 0 && (
                 <p className="text-sm text-gray-400 text-center py-8">No contracts found for this company.</p>
+              )}
+              <button
+                onClick={() => setCreatingContract(true)}
+                className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Plus size={14} /> New Contract
+              </button>
+            </div>
+          )}
+
+          {/* ── Proposals ──
+              Previously a company's proposals could be CREATED from this
+              panel but never viewed here — staff had to leave and re-filter
+              the Proposals page to see what had been sent. */}
+          {tab === 'proposals' && (
+            <div className="flex flex-col gap-3">
+              {companyProposals.map(p => (
+                <div key={p.id} onClick={() => router.push(`/proposals?open=${p.id}`)} className="p-4 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <StatusBadge label={p.status} colorClass={proposalStatusColors[p.status]} />
+                      <StatusBadge label={p.serviceType} colorClass={serviceTypeColors[p.serviceType]} />
+                    </div>
+                    <p className="text-base font-bold flex-shrink-0" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>
+                      {formatCurrency(p.value)}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>{p.assignedRep || 'Unassigned'}</span>
+                    {p.sentDate && <span>Sent {new Date(p.sentDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>}
+                  </div>
+                </div>
+              ))}
+              {companyProposals.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-8">No proposals for this company.</p>
+              )}
+              <button
+                onClick={() => setCreatingProposal(true)}
+                className="w-full py-2.5 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-gray-300 hover:text-gray-500 transition-colors flex items-center justify-center gap-1.5"
+              >
+                <Plus size={14} /> New Proposal
+              </button>
+            </div>
+          )}
+
+          {/* ── Invoices ──
+              Invoices were previously only visible as a small widget nested
+              inside the Contracts tab, so an invoice with no linked contract
+              had nowhere to surface on the company's own page at all. */}
+          {tab === 'invoices' && (
+            <div className="flex flex-col gap-3">
+              {companyInvoices.length > 0 && (
+                <div className="grid grid-cols-2 gap-2 mb-1">
+                  <div className="p-3 bg-gray-50 rounded-xl">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Total Invoiced</p>
+                    <p className="text-sm font-bold text-gray-800">{formatCurrency(totalInvoiced)}</p>
+                  </div>
+                  <div className="p-3 bg-gray-50 rounded-xl">
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wide mb-0.5">Total Paid</p>
+                    <p className="text-sm font-bold text-emerald-700">{formatCurrency(totalPaid)}</p>
+                  </div>
+                </div>
+              )}
+              {companyInvoices.map(inv => (
+                <div key={inv.id} onClick={() => router.push(`/billing?open=${inv.id}`)} className="p-4 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors">
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status]} />
+                      <p className="text-xs text-gray-500 mt-1.5">{inv.serviceType}</p>
+                    </div>
+                    <p className="text-base font-bold" style={{ fontFamily: 'var(--font-heading)', color: '#015035' }}>
+                      {formatCurrency(inv.amount)}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>Issued {inv.issuedDate ? new Date(inv.issuedDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}</span>
+                    <span>Due {inv.dueDate ? new Date(inv.dueDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}</span>
+                  </div>
+                </div>
+              ))}
+              {companyInvoices.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-8">No invoices for this company.</p>
+              )}
+            </div>
+          )}
+
+          {/* ── Projects ──
+              Only the FIRST project was ever shown, inside the Overview tab —
+              a client with more than one engagement had the rest invisible. */}
+          {tab === 'projects' && (
+            <div className="flex flex-col gap-3">
+              {companyProjects.map(p => (
+                <div key={p.id} onClick={() => router.push(`/projects/${p.id}`)} className="p-4 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors">
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <StatusBadge label={p.status} colorClass={projectStatusColors[p.status]} />
+                      <StatusBadge label={p.serviceType} colorClass={serviceTypeColors[p.serviceType]} />
+                    </div>
+                    <p className="text-sm font-bold flex-shrink-0" style={{ color: '#015035' }}>{p.progress}%</p>
+                  </div>
+                  <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full" style={{ width: `${p.progress}%`, background: '#015035' }} />
+                  </div>
+                </div>
+              ))}
+              {companyProjects.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-8">No projects for this company.</p>
+              )}
+            </div>
+          )}
+
+          {/* ── Tickets ──
+              Support activity had no representation on the company page at
+              all — staff had to open the Tickets page and filter by hand. */}
+          {tab === 'tickets' && (
+            <div className="flex flex-col gap-3">
+              {companyTickets.map(t => (
+                <div key={t.id} onClick={() => router.push(`/tickets?open=${t.id}`)} className="p-4 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors">
+                  <div className="flex items-start justify-between mb-2 gap-2">
+                    <p className="text-sm font-semibold text-gray-900 flex-1 min-w-0">{t.subject}</p>
+                    <StatusBadge label={t.status} colorClass={ticketStatusColors[t.status]} />
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-gray-500">
+                    <span>{t.priority} priority{t.assignedTo ? ` · ${t.assignedTo}` : ''}</span>
+                    <span>{t.createdDate ? new Date(t.createdDate).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : ''}</span>
+                  </div>
+                </div>
+              ))}
+              {companyTickets.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-8">No support tickets for this company.</p>
               )}
             </div>
           )}
@@ -1555,7 +1744,10 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               body: JSON.stringify({
                 dealId: '',
                 company: data.company,
-                companyId: company.id,
+                // Use what the form actually has selected (AUDIT #721) —
+                // same fix already applied to the New Deal/New Contract
+                // handlers below; the panel no longer discards the id.
+                companyId: data.companyId ?? company.id,
                 serviceType: data.serviceType,
                 assignedRep: data.assignedRep,
                 value: Number(data.value) || 0,
@@ -1580,6 +1772,101 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
           }
         }}
         onClose={() => setCreatingProposal(false)}
+      />
+    )}
+    {creatingDeal && (
+      <NewDealPanel
+        initialCompany={company.name}
+        initialCompanyId={company.id}
+        onSave={async (data: NewDealData) => {
+          setCreatingDeal(false)
+          try {
+            const res = await fetch('/api/deals', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                company: data.company,
+                // data.companyId (not the panel's own `company.id`) reflects
+                // what's actually selected in the form's Company dropdown —
+                // initialCompany/initialCompanyId only pre-fill it, they
+                // don't lock it, so a user who changes the company before
+                // saving must not have the deal silently attributed back to
+                // this panel's original company.
+                companyId: data.companyId ?? company.id,
+                contact: { id: `contact-${Date.now()}`, name: data.contactName, email: data.contactEmail, phone: data.contactPhone, title: data.contactTitle },
+                stage: data.stage,
+                lineItems: data.lineItems,
+                closeDate: data.closeDate,
+                assignedRep: data.assignedRep,
+                probability: Number(data.probability) || 20,
+                notes: data.notes ? [data.notes] : [],
+              }),
+            })
+            if (res.ok) {
+              const saved = await res.json()
+              toast('Deal created', 'success')
+              router.push(`/crm/pipeline?open=${saved.id}`)
+            } else {
+              const err = await res.json().catch(() => ({}))
+              toast(err.error || 'Failed to create deal', 'error')
+            }
+          } catch {
+            toast('Network error — could not create deal', 'error')
+          }
+        }}
+        onClose={() => setCreatingDeal(false)}
+      />
+    )}
+    {creatingContract && (
+      <NewContractPanel
+        initialCompany={company.name}
+        initialCompanyId={company.id}
+        onSave={async (data: NewContractFormData) => {
+          setCreatingContract(false)
+          const startDate = data.startDate
+          const renewalDate = (() => {
+            try {
+              const d = new Date(startDate)
+              d.setMonth(d.getMonth() + Number(data.duration))
+              return d.toISOString().split('T')[0]
+            } catch {
+              return startDate
+            }
+          })()
+          try {
+            const res = await fetch('/api/contracts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                company: data.company,
+                // See matching comment in the New Deal handler above — use
+                // what the form actually has selected, not the panel's
+                // original company, in case the user changed it.
+                companyId: data.companyId ?? company.id,
+                status: 'Draft',
+                value: Number(data.value),
+                serviceType: data.serviceType,
+                assignedRep: data.assignedRep,
+                billingStructure: data.billingStructure,
+                duration: Number(data.duration),
+                startDate,
+                renewalDate,
+                proposalId: data.proposalId,
+              }),
+            })
+            if (res.ok) {
+              const saved = await res.json()
+              toast('Contract created', 'success')
+              router.push(`/contracts?open=${saved.id}`)
+            } else {
+              const err = await res.json().catch(() => ({}))
+              toast(err.error || 'Failed to create contract', 'error')
+            }
+          } catch {
+            toast('Network error — could not create contract', 'error')
+          }
+        }}
+        onClose={() => setCreatingContract(false)}
       />
     )}
     </>
@@ -1876,6 +2163,8 @@ export default function CompaniesPage() {
   const [contracts, setContracts] = useState<Contract[]>([])
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [proposals, setProposals] = useState<Proposal[]>([])
+  const [tickets, setTickets] = useState<CompanyTicket[]>([])
   const [crmActivities, setCrmActivities] = useState<CRMActivity[]>([])
 
   const handlePageSizeChange = useCallback((size: number) => {
@@ -1894,6 +2183,8 @@ export default function CompaniesPage() {
     fetchContracts().then(setContracts)
     fetchInvoices().then(setInvoices)
     fetchProjects().then(setProjects)
+    fetchProposals().then(setProposals)
+    fetchAllPages<CompanyTicket>('/api/tickets').then(setTickets).catch(() => {})
     fetchCrmActivities().then(setCrmActivities)
   }, [])
 
@@ -2429,6 +2720,8 @@ export default function CompaniesPage() {
           contracts={contracts}
           invoices={invoices}
           projects={projects}
+          proposals={proposals}
+          tickets={tickets}
           crmActivities={crmActivities}
           onClose={() => setSelectedCompany(null)}
           onEdit={() => setEditingCompany(localCompanies.find(c => c.id === selectedCompany.id) ?? selectedCompany)}

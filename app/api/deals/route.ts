@@ -5,6 +5,7 @@ import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { computeDealScore } from '@/lib/deal-score'
 import { requireRole } from '@/lib/rbac'
+import { normalizeDealLineItems, computeLineItemsTotal, serviceTypesFromLineItems } from '@/lib/deal-line-items'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapDeal(row: any) {
@@ -33,6 +34,7 @@ function mapDeal(row: any) {
     dealScore:    score,
     dealScoreFactors: factors,
     customFields: row.custom_fields ?? {},
+    lineItems:    row.line_items ?? [],
   }
 }
 
@@ -73,9 +75,19 @@ export const POST = withErrorHandler('deals POST', async (req) => {
   })
   if (!result.valid) return validationError(result.error)
 
-  const serviceTypes: string[] = Array.isArray(body.serviceTypes) && body.serviceTypes.length > 0
-    ? body.serviceTypes
-    : body.serviceType ? [body.serviceType] : ['General']
+  // Line items (see lib/deal-line-items.ts) are the source of truth for
+  // value/serviceTypes when present — a deal pitched as multiple
+  // products/services at different rates ($25.5K one-time + $57K recurring,
+  // etc.) instead of one opaque number. Falls back to the plain
+  // value/serviceType(s) fields when absent, so simple single-service deals
+  // aren't required to build a line-item list.
+  const lineItems = normalizeDealLineItems(body.lineItems)
+  const serviceTypes: string[] = lineItems.length > 0
+    ? serviceTypesFromLineItems(lineItems)
+    : Array.isArray(body.serviceTypes) && body.serviceTypes.length > 0
+      ? body.serviceTypes
+      : body.serviceType ? [body.serviceType] : ['General']
+  const value = lineItems.length > 0 ? computeLineItemsTotal(lineItems) : (body.value ?? 0)
   const db = createServiceClient()
   const { data, error } = await db
     .from('deals')
@@ -84,9 +96,10 @@ export const POST = withErrorHandler('deals POST', async (req) => {
       company:      body.company,
       contact:      body.contact ?? null,
       stage:        body.stage ?? 'Lead',
-      value:        body.value ?? 0,
+      value,
       service_type: serviceTypes[0] ?? 'General',
       service_types: serviceTypes,
+      line_items:   lineItems,
       close_date:   body.closeDate ?? null,
       assigned_rep: body.assignedRep ?? '',
       probability:  body.probability ?? 0,

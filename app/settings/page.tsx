@@ -300,6 +300,17 @@ export default function SettingsPage() {
 
   useEffect(() => { setLoading(false) }, [])
 
+  // Result of the server-side Gmail OAuth round trip (AUDIT #23). The
+  // callback can only communicate through the URL, so surface it as a toast
+  // and strip the params — otherwise a refresh re-fires the same message.
+  useEffect(() => {
+    const ok = searchParams.get('gmail')
+    const err = searchParams.get('gmail_error')
+    if (!ok && !err) return
+    toast(err ?? ok ?? '', err ? 'error' : 'success')
+    router.replace('/settings?tab=integrations')
+  }, [searchParams, toast, router])
+
   // AI Usage — Ollama/Groq expose no usage-query API this app can call, so
   // this reads the local ai_usage_log every chatCompletion() call writes to
   // (lib/ai-client.ts), the only real visibility into call volume/provider

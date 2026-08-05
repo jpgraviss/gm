@@ -161,8 +161,12 @@ describe('automations-engine — Create Invoice action (Phase 1.1)', () => {
     fireAutomations('contract_executed', { company: 'Acme Co' })
     await flush()
 
-    const due = new Date(String(insertCalls['invoices'][0].due_date))
-    const daysOut = Math.round((due.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-    expect(daysOut).toBe(7)
+    // Compare date strings, not a rounded day-delta. `due_date` is
+    // midnight-truncated (`toISOString().split('T')[0]`), so measuring it
+    // against `Date.now()` is time-of-day dependent: before ~12:00 UTC the
+    // gap rounds to 7, after it rounds to 6. That made this assertion pass
+    // or fail purely on when the suite happened to run.
+    const expected = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    expect(String(insertCalls['invoices'][0].due_date)).toBe(expected)
   })
 })

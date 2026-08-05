@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 import { encrypt, decrypt } from '@/lib/encryption'
+import { getValidGmailToken } from '@/lib/gmail-oauth'
 
 async function verifyOwnership(req: NextRequest, targetEmail: string): Promise<NextResponse | null> {
   const callerEmail = await getAuthenticatedEmail(req)
@@ -52,7 +53,7 @@ export const GET = withErrorHandler('gmail/token GET', async (req) => {
   const db = createServiceClient()
   const { data, error } = await db
     .from('team_members')
-    .select('id, name, gmail_access_token, gmail_email, gmail_token_expires_at, gmail_settings, bcc_email')
+    .select('id, name, gmail_access_token, gmail_refresh_token, gmail_email, gmail_token_expires_at, gmail_settings, bcc_email')
     .eq('email', email)
     .single()
 
@@ -70,21 +71,20 @@ export const GET = withErrorHandler('gmail/token GET', async (req) => {
     if (bccErr) bccEmail = null
   }
 
-  // Check if token is expired (with 5-minute buffer)
-  if (data.gmail_token_expires_at) {
-    const expiresAt = new Date(data.gmail_token_expires_at)
-    const buffer = new Date(Date.now() + 5 * 60 * 1000)
-    if (expiresAt < buffer) {
-      return NextResponse.json({ gmailToken: null, gmailEmail: data.gmail_email, expired: true, bccEmail })
-    }
+  // AUDIT #23 — an expired token used to be terminal here (`expired: true`,
+  // and the UI told the user to reconnect). With a refresh token stored,
+  // getValidGmailToken renews it transparently; it returns null only for a
+  // legacy connection that has none, or a revoked grant — which is exactly
+  // when `expired` is still the honest answer.
+  const accessToken = await getValidGmailToken(data)
+  if (!accessToken) {
+    return NextResponse.json({ gmailToken: null, gmailEmail: data.gmail_email, expired: true, bccEmail })
   }
 
   return NextResponse.json({
-    // AUDIT #605 — stored encrypted at rest since this fix; decrypt()
-    // gracefully passes through any still-plaintext legacy value (no
-    // colons in the ciphertext format), so no backfill migration is
-    // needed — these tokens are short-lived (~1hr) and self-replace.
-    gmailToken: data.gmail_access_token ? decrypt(data.gmail_access_token) : null,
+    // AUDIT #605 — stored encrypted at rest; getValidGmailToken decrypts,
+    // and gracefully passes through any still-plaintext legacy value.
+    gmailToken: accessToken,
     gmailEmail: data.gmail_email,
     gmailSettings: data.gmail_settings ?? null,
     bccEmail,

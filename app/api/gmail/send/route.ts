@@ -6,7 +6,7 @@ import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { resolveGmailSettings } from '@/lib/gmail-settings'
 import { type EmailSignatureData, SIGNATURE_MARKER, generateSignatureHtml } from '@/lib/email-signature'
 import { rewriteLinksForExtensionTracking, trackingPixelTag } from '@/lib/tracked-emails'
-import { decrypt } from '@/lib/encryption'
+import { getValidGmailToken } from '@/lib/gmail-oauth'
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -42,7 +42,7 @@ export const POST = withErrorHandler('gmail/send POST', async (req) => {
     const db = createServiceClient()
     const { data: member, error: memberErr } = await db
       .from('team_members')
-      .select('id, name, gmail_access_token, gmail_email, gmail_token_expires_at, status, gmail_settings, email_signature')
+      .select('id, name, gmail_access_token, gmail_refresh_token, gmail_email, gmail_token_expires_at, status, gmail_settings, email_signature')
       .eq('email', userEmail)
       .single()
 
@@ -62,16 +62,18 @@ export const POST = withErrorHandler('gmail/send POST', async (req) => {
       return NextResponse.json({ error: 'Gmail not connected' }, { status: 400 })
     }
 
-    // ── Check token expiry (with 5-minute buffer) ─────────────────────────
-    if (member.gmail_token_expires_at) {
-      const expiresAt = new Date(member.gmail_token_expires_at)
-      const buffer = new Date(Date.now() + 5 * 60 * 1000)
-      if (expiresAt < buffer) {
-        return NextResponse.json(
-          { error: 'Gmail token expired. Please reconnect Gmail.' },
-          { status: 401 },
-        )
-      }
+    // AUDIT #23 — this used to hard-fail on an expired token, which was the
+    // only option when Gmail was connected through the browser token client
+    // (no refresh token existed to renew with). getValidGmailToken now
+    // refreshes and persists silently; it still returns null for a legacy
+    // connection with no refresh token, or a grant the user has revoked,
+    // and the message says which action fixes it.
+    const accessToken = await getValidGmailToken(member)
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: 'Gmail session expired. Reconnect Gmail in Settings to restore sending.' },
+        { status: 401 },
+      )
     }
 
     // ── AUDIT.md #407 — gmail_settings was write-only; this is the real send
@@ -133,7 +135,7 @@ export const POST = withErrorHandler('gmail/send POST', async (req) => {
     // ── Send the email ────────────────────────────────────────────────────
     const from = member.gmail_email ?? userEmail
     const { messageId, threadId } = await sendViaGmail({
-      accessToken: decrypt(member.gmail_access_token),
+      accessToken,
       from,
       to,
       subject,

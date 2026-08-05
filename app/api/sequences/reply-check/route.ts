@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { withErrorHandler } from '@/lib/api-handler'
-import { decrypt } from '@/lib/encryption'
+import { getValidGmailToken } from '@/lib/gmail-oauth'
 
 interface GmailThread {
   id: string
@@ -77,17 +77,19 @@ export const POST = withErrorHandler('sequences/reply-check POST', async (req: N
   if (repIds.length) {
     const { data: reps } = await db
       .from('team_members')
-      .select('id, gmail_access_token, gmail_token_expires_at')
+      .select('id, gmail_access_token, gmail_refresh_token, gmail_token_expires_at')
       .in('id', repIds)
 
     for (const rep of reps ?? []) {
       if (!rep.gmail_access_token) continue
-      // Check token expiry with 5-minute buffer
-      if (rep.gmail_token_expires_at) {
-        const expiresAt = new Date(rep.gmail_token_expires_at)
-        if (expiresAt < new Date(Date.now() + 5 * 60 * 1000)) continue
-      }
-      repTokens.set(rep.id, decrypt(rep.gmail_access_token))
+      // AUDIT #23/#37 — an expired token used to mean this rep was skipped
+      // entirely for the rest of time, and skipping reply-detection is the
+      // damaging failure: the contact replied, nothing noticed, and the
+      // sequence kept sending them scripted email. getValidGmailToken
+      // refreshes and persists instead, so a connection self-heals rather
+      // than going quietly dark an hour after it was made.
+      const token = await getValidGmailToken(rep)
+      if (token) repTokens.set(rep.id, token)
     }
   }
 

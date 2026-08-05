@@ -43,7 +43,7 @@ interface AuthContextType {
   // Gmail
   gmailToken: string | null
   gmailEmail: string | null
-  connectGmail: () => void
+  connectGmail: () => Promise<void>
   disconnectGmail: () => void
   // Team members
   members: TeamMember[]
@@ -630,60 +630,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await clearAuthCookie()
   }
 
-  const connectGmail = useCallback(() => {
-    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? ''
-    if (!clientId) return
-
-    const g = (window as unknown as { google?: { accounts?: { oauth2?: { initTokenClient: (cfg: object) => { requestAccessToken: () => void } } } } }).google
-    if (!g?.accounts?.oauth2) {
-      console.error('Google Identity Services not loaded')
-      return
+  // AUDIT #23 — this used Google Identity Services' browser token client,
+  // which by design returns only a short-lived access token and never a
+  // refresh token. Every Gmail connection therefore died about an hour
+  // later, taking the inbox poller and (worse, because it's silent) sequence
+  // reply-detection down with it until someone reconnected by hand.
+  //
+  // Now redirects into the server-side authorization-code flow
+  // (`/api/gmail/auth` → Google → `/api/gmail/callback`), which is the only
+  // way to obtain the refresh token that lets the connection renew itself.
+  // Same shape as the Calendar and Drive connections already in this app.
+  const connectGmail = useCallback(async () => {
+    try {
+      const res = await fetch('/api/gmail/auth')
+      const data = await res.json()
+      if (!res.ok || !data.url) {
+        console.error('[connectGmail]', data.error ?? 'could not start the Gmail connection')
+        return
+      }
+      window.location.href = data.url
+    } catch (err) {
+      console.error('[connectGmail]', err)
     }
-
-    const tokenClient = g.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: [
-        'https://www.googleapis.com/auth/gmail.readonly',
-        'https://www.googleapis.com/auth/gmail.send',
-        'https://www.googleapis.com/auth/userinfo.email',
-      ].join(' '),
-      callback: (resp: { access_token?: string; error?: string; expires_in?: number }) => {
-        if (resp.error || !resp.access_token) return
-        setGmailToken(resp.access_token)
-        const expiresIn = resp.expires_in ?? 3600
-
-        // Fetch the Gmail email address
-        fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-          headers: { Authorization: `Bearer ${resp.access_token}` },
-        })
-          .then(r => r.json())
-          .then((info: { email?: string }) => {
-            const email = info.email ?? null
-            if (email) {
-              setGmailEmail(email)
-              try { localStorage.setItem('gravhub_gmail_email', email) } catch {/* ignore */}
-            }
-
-            // Persist token to database so user stays signed in
-            if (user?.email) {
-              fetch('/api/gmail/token', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  userEmail: user.email,
-                  gmailToken: resp.access_token,
-                  gmailEmail: email,
-                  expiresIn,
-                }),
-              }).catch(() => {/* non-blocking */})
-            }
-          })
-          .catch(() => {/* non-blocking */})
-      },
-    })
-
-    tokenClient.requestAccessToken()
-  }, [user])
+  }, [])
 
   const disconnectGmail = useCallback(() => {
     const g = (window as unknown as { google?: { accounts?: { oauth2?: { revoke: (token: string, cb: () => void) => void } } } }).google

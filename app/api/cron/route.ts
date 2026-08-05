@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
+import { generateRecurringInvoices } from '@/lib/recurring-billing'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { checkSite, recordCheck, computeUptime30d, type MonitoredSiteRow } from '@/lib/uptime'
@@ -161,6 +162,16 @@ export const GET = withErrorHandler('cron GET', async (req) => {
   //     recovery below. Run before processScheduledEmails so a rescued row
   //     is immediately eligible for (re)claim in the same tick instead of
   //     waiting for the next one.
+  // Recurring (retainer) billing — with ~30 real contract clients, every
+  // invoice previously had to be manually recreated each period. Idempotent
+  // per billing period, so the 5-minute cron ping can't mint duplicates.
+  try {
+    results.recurringBilling = await generateRecurringInvoices()
+  } catch (err) {
+    console.error('[cron] recurring billing failed:', err)
+    results.recurringBilling = { error: 'Failed' }
+  }
+
   try {
     results.rescuedScheduledEmails = await rescueStuckSendingEmails()
   } catch (err) {

@@ -16,6 +16,13 @@ import {
 // comes from app/client/layout.tsx instead of being reimplemented here, so
 // this page only renders its own page-specific header + content.
 
+// AUDIT #693 — every field here is optional and several have no data source
+// behind them at all (contract/invoice document URLs, welcome-email permalink,
+// strategy-call booking link, usage-guide + help-article URLs, monthly-report
+// artifact and metrics). GET /api/delivery/workflow deliberately omits those
+// rather than inventing them — see the long comment above mapWorkflow() for
+// what each would need. So any step can legitimately arrive with partial
+// details or none, and the panel below must read honestly in that case.
 interface StepDetail {
   contractUrl?: string
   signatureStatus?: string
@@ -29,10 +36,39 @@ interface StepDetail {
   bookingLink?: string
   meetingNotes?: string
   usageGuideUrl?: string
+  usageGuideSentDate?: string
   helpArticles?: { title: string; url: string }[]
-  deliverables?: { name: string; url: string }[]
+  deliverables?: { name: string; url?: string }[]
   reportUrl?: string
+  lastReportSentDate?: string
   metricsPreview?: { label: string; value: string }[]
+}
+
+// Which StepDetail fields each step actually renders — used to decide whether
+// an expanded step has anything to show, so it never opens to a blank box.
+const STEP_DETAIL_FIELDS: Record<number, (keyof StepDetail)[]> = {
+  1: ['signatureStatus', 'contractUrl'],
+  2: ['invoiceAmount', 'paymentStatus', 'invoiceUrl'],
+  3: ['welcomeEmailDate', 'welcomeEmailUrl'],
+  4: ['portalAccess', 'firstLoginDate'],
+  5: ['bookingLink', 'meetingNotes'],
+  6: ['usageGuideUrl', 'usageGuideSentDate', 'helpArticles'],
+  7: ['deliverables'],
+  8: ['reportUrl', 'lastReportSentDate', 'metricsPreview'],
+}
+
+const EMPTY_DETAIL_MESSAGES: Record<number, string> = {
+  7: 'No deliverables uploaded yet.',
+}
+
+function hasStepDetails(step: number, details?: StepDetail): boolean {
+  if (!details) return false
+  return (STEP_DETAIL_FIELDS[step] ?? []).some(field => {
+    const value = details[field]
+    if (value === undefined || value === null) return false
+    if (Array.isArray(value)) return value.length > 0
+    return true
+  })
 }
 
 interface WorkflowStep {
@@ -123,10 +159,16 @@ function StepCard({ step, expanded, onToggle }: { step: WorkflowStep; expanded: 
         </div>
       </button>
 
-      {expanded && step.details && (
+      {expanded && (
         <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-0">
           <div className="border-t border-gray-100 pt-4 space-y-3">
-            <StepDetails step={step.step} details={step.details} />
+            {hasStepDetails(step.step, step.details) ? (
+              <StepDetails step={step.step} details={step.details!} />
+            ) : (
+              <p className="text-sm text-gray-400">
+                {EMPTY_DETAIL_MESSAGES[step.step] ?? 'No details available for this step yet.'}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -232,6 +274,12 @@ function StepDetails({ step, details }: { step: number; details: StepDetail }) {
     case 6:
       return (
         <>
+          {details.usageGuideSentDate && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">Sent</span>
+              <span className="font-medium text-gray-900">{formatDate(details.usageGuideSentDate)}</span>
+            </div>
+          )}
           {details.usageGuideUrl && (
             <a href={details.usageGuideUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-medium hover:underline" style={{ color: '#015035' }}>
               <Download size={14} /> Download Usage Guide
@@ -250,24 +298,32 @@ function StepDetails({ step, details }: { step: number; details: StepDetail }) {
         </>
       )
     case 7:
+      // A deliverable's file link is optional when staff add it, so list the
+      // ones without a link as plain text instead of a dead anchor.
       return (
-        <>
-          {details.deliverables && details.deliverables.length > 0 ? (
-            <div className="space-y-1.5">
-              {details.deliverables.map((d, i) => (
-                <a key={i} href={d.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-[#015035] hover:underline font-medium">
-                  <Download size={13} /> {d.name}
-                </a>
-              ))}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-400">No deliverables uploaded yet.</p>
-          )}
-        </>
+        <div className="space-y-1.5">
+          {(details.deliverables ?? []).map((d, i) => (
+            d.url ? (
+              <a key={i} href={d.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-[#015035] hover:underline font-medium">
+                <Download size={13} /> {d.name}
+              </a>
+            ) : (
+              <p key={i} className="flex items-center gap-2 text-sm text-gray-700 font-medium">
+                <Package size={13} className="text-gray-400" /> {d.name}
+              </p>
+            )
+          ))}
+        </div>
       )
     case 8:
       return (
         <>
+          {details.lastReportSentDate && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-gray-500">Latest Report Sent</span>
+              <span className="font-medium text-gray-900">{formatDate(details.lastReportSentDate)}</span>
+            </div>
+          )}
           {details.reportUrl && (
             <a href={details.reportUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm font-medium hover:underline" style={{ color: '#015035' }}>
               <Download size={14} /> Download Latest Report

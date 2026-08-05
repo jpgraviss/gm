@@ -21,7 +21,10 @@ export interface CompanyScopedRecord {
   company?: string | null
 }
 
-function normalizeName(name: string | null | undefined): string {
+/** Shared name normalization for the legacy no-FK fallback path. Exported so
+ *  callers that can't use `belongsToCompany` directly — e.g. a row that has no
+ *  `companyId` of its own to prefer — still compare names the same way. */
+export function normalizeCompanyName(name: string | null | undefined): string {
   return (name ?? '').trim().toLowerCase()
 }
 
@@ -33,7 +36,7 @@ export function belongsToCompany(
   companyName: string,
 ): boolean {
   if (record.companyId) return record.companyId === companyId
-  return normalizeName(record.company) === normalizeName(companyName)
+  return normalizeCompanyName(record.company) === normalizeCompanyName(companyName)
 }
 
 /** Filter helper for the common list case. */

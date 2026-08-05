@@ -6,6 +6,7 @@ import Header from '@/components/layout/Header'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
 import { fetchTeamMembers } from '@/lib/supabase'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import type { TeamMember } from '@/lib/types'
 import { useToast } from '@/components/ui/Toast'
 
@@ -57,6 +58,38 @@ interface Booking {
   subscription_id: string | null
   created_at: string
   intakeAnswers?: { label: string; answer: string }[]
+}
+
+/** One staff booking calendar, from GET /api/calendar/calendars. */
+interface StaffCalendar {
+  slug: string
+  title: string
+  active: boolean
+}
+
+/**
+ * One entry in the shared Team view, from GET /api/calendar/team. Guest
+ * contact fields arrive already redacted server-side for other people's
+ * bookings unless the caller is Dept Manager+ — `details_visible` says which
+ * it is, so a null here is never ambiguous between "hidden" and "empty".
+ */
+interface TeamScheduleEntry {
+  id: string
+  source: 'booking' | 'booking_type_booking'
+  owner_slug: string | null
+  date: string
+  start_time: string
+  end_time: string
+  status: string
+  timezone: string
+  title: string
+  type_name: string | null
+  color: string | null
+  meet_link: string | null
+  guest_email: string | null
+  guest_company: string | null
+  notes: string | null
+  details_visible: boolean
 }
 
 interface CalendarSubscription {
@@ -117,7 +150,12 @@ export default function CalendarPage() {
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day'>('month')
+  const [calendarView, setCalendarView] = useState<'month' | 'week' | 'day' | 'team'>('month')
+  // ── Team view (shared multi-staff schedule) ──
+  const [staffCalendars, setStaffCalendars] = useState<StaffCalendar[]>([])
+  const [teamEntries, setTeamEntries] = useState<TeamScheduleEntry[]>([])
+  const [teamLoading, setTeamLoading] = useState(false)
+  const [teamError, setTeamError] = useState<string | null>(null)
 
   // AUDIT #477 — this used to derive the booking-link slug purely by
   // lowercasing/hyphenating user.name client-side, never checking the
@@ -180,7 +218,34 @@ export default function CalendarPage() {
       .then(r => r.ok ? r.json() : [])
       .then(d => { if (Array.isArray(d)) setSubscriptions(d) })
       .catch(() => {})
+    // The staff calendars that become the Team view's columns. Reuses the
+    // existing GET /api/calendar/calendars (AUDIT #699) rather than a second
+    // route; fetchAllPages() both follows a cursor if that endpoint ever
+    // gains one and rejects on a non-ok response instead of quietly
+    // returning a short list.
+    fetchAllPages<StaffCalendar>('/api/calendar/calendars')
+      .then(setStaffCalendars)
+      .catch(() => toast('Failed to load staff calendars', 'error'))
   }, [])
+
+  // Team view data — only fetched while the Team view is actually open, and
+  // re-fetched as the user navigates days.
+  const teamDateStr = `${calendarMonth.getFullYear()}-${String(calendarMonth.getMonth() + 1).padStart(2, '0')}-${String(calendarMonth.getDate()).padStart(2, '0')}`
+  useEffect(() => {
+    if (calendarView !== 'team') return
+    let cancelled = false
+    setTeamLoading(true)
+    setTeamError(null)
+    fetchAllPages<TeamScheduleEntry>(`/api/calendar/team?start=${teamDateStr}&end=${teamDateStr}`)
+      .then(rows => { if (!cancelled) setTeamEntries(rows) })
+      .catch(() => {
+        if (cancelled) return
+        setTeamEntries([])
+        setTeamError('Could not load the team schedule. It may be incomplete — reload before relying on it.')
+      })
+      .finally(() => { if (!cancelled) setTeamLoading(false) })
+    return () => { cancelled = true }
+  }, [calendarView, teamDateStr])
 
   // AUDIT #478 — map a new-flow (booking_type_bookings) row into the same
   // shape as a legacy Booking, identical to what getBookingsForDate()
@@ -475,6 +540,8 @@ export default function CalendarPage() {
   }
 
   // Navigation handlers for week/day
+  // The Team view is a single-day, per-person grid, so it navigates by day
+  // exactly like the Day view does.
   function navigatePrev() {
     if (calendarView === 'month') {
       setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1))
@@ -515,6 +582,35 @@ export default function CalendarPage() {
     } else {
       return formatFullDate(calendarMonth)
     }
+  }
+
+  // ── Team view helpers ──
+  // Columns are the active staff calendars, plus a column for any owner that
+  // actually has entries but isn't in that list (an inactive/removed
+  // calendar), plus an explicit "Unassigned" column when entries can't be
+  // attributed to anyone — an imported subscription event, or a booking type
+  // with no owner_calendar_slug set (AUDIT #699). Those are surfaced rather
+  // than dropped: a booking nobody owns is exactly the thing worth noticing.
+  const teamColumns: { key: string; label: string; unassigned: boolean }[] = (() => {
+    const cols = staffCalendars
+      .filter(c => c.active)
+      .map(c => ({ key: c.slug, label: c.title || c.slug, unassigned: false }))
+    const known = new Set(cols.map(c => c.key))
+    for (const e of teamEntries) {
+      if (e.owner_slug && !known.has(e.owner_slug)) {
+        known.add(e.owner_slug)
+        const match = staffCalendars.find(c => c.slug === e.owner_slug)
+        cols.push({ key: e.owner_slug, label: match?.title || e.owner_slug, unassigned: false })
+      }
+    }
+    if (teamEntries.some(e => !e.owner_slug)) {
+      cols.push({ key: '__unassigned__', label: 'Unassigned', unassigned: true })
+    }
+    return cols
+  })()
+
+  function teamEntriesForColumn(key: string, unassigned: boolean): TeamScheduleEntry[] {
+    return teamEntries.filter(e => (unassigned ? !e.owner_slug : e.owner_slug === key))
   }
 
   return (
@@ -723,7 +819,7 @@ export default function CalendarPage() {
               </button>
             </div>
             <div className="flex gap-1 bg-gray-50 border border-gray-100 rounded-lg p-1">
-              {(['month', 'week', 'day'] as const).map(v => (
+              {(['month', 'week', 'day', 'team'] as const).map(v => (
                 <button
                   key={v}
                   onClick={() => setCalendarView(v)}
@@ -1019,6 +1115,165 @@ export default function CalendarPage() {
                 {dayBookings.length === 0 && (
                   <div className="text-center py-8 text-sm text-gray-400">
                     No bookings for this day
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+
+          {/* ── Team View (shared multi-staff schedule) ── */}
+          {calendarView === 'team' && (() => {
+            const TEAM_START_HOUR = 7
+            const TEAM_END_HOUR = 19
+            const HOUR_HEIGHT = 64
+            const hours = Array.from({ length: TEAM_END_HOUR - TEAM_START_HOUR }, (_, i) => TEAM_START_HOUR + i)
+            const colCount = teamColumns.length
+            const isTeamToday = teamDateStr === todayStr
+
+            return (
+              <div>
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                  <span className="text-xs font-semibold text-[#012b1e] bg-[#015035]/10 px-3 py-1.5 rounded-lg">
+                    Everyone’s schedule
+                  </span>
+                  {isTeamToday && (
+                    <span className="text-xs text-[#015035] font-semibold bg-[#015035]/10 px-3 py-1.5 rounded-lg">Today</span>
+                  )}
+                  <span className="text-xs text-gray-400">
+                    Your own bookings still live in the Month / Week / Day views above.
+                  </span>
+                </div>
+
+                {teamError && (
+                  <div className="mb-3 text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-lg">
+                    {teamError}
+                  </div>
+                )}
+
+                {teamLoading ? (
+                  <div className="flex items-center justify-center py-16 gap-2 text-gray-400 text-sm">
+                    <div className="w-4 h-4 border-2 border-[#015035] border-t-transparent rounded-full animate-spin" />
+                    Loading team schedule…
+                  </div>
+                ) : colCount === 0 ? (
+                  <div className="text-center py-10">
+                    <p className="text-sm text-gray-500 font-medium">No staff calendars set up yet</p>
+                    <a href="/settings/calendar" className="text-xs text-[#015035] font-semibold hover:underline">
+                      Create a booking calendar in Settings →
+                    </a>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto -mx-5 px-5">
+                    <div style={{ minWidth: Math.max(600, 56 + colCount * 150) }}>
+                      {/* Person column headers */}
+                      <div
+                        className="grid gap-px mb-1"
+                        style={{ gridTemplateColumns: `56px repeat(${colCount}, minmax(0, 1fr))` }}
+                      >
+                        <div />
+                        {teamColumns.map(col => {
+                          const count = teamEntriesForColumn(col.key, col.unassigned).length
+                          return (
+                            <div key={col.key} className={`text-center py-2 rounded-lg ${col.unassigned ? 'bg-amber-50' : 'bg-gray-50'}`}>
+                              <div className={`text-[11px] font-bold truncate px-1 ${col.unassigned ? 'text-amber-700' : 'text-gray-700'}`} title={col.label}>
+                                {col.label}
+                              </div>
+                              <div className="text-[10px] text-gray-400">
+                                {count === 0 ? 'Free' : `${count} booking${count === 1 ? '' : 's'}`}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {/* Time grid */}
+                      <div
+                        className="relative grid gap-px border-t border-gray-100"
+                        style={{ gridTemplateColumns: `56px repeat(${colCount}, minmax(0, 1fr))`, height: hours.length * HOUR_HEIGHT }}
+                      >
+                        {hours.map(h => (
+                          <div
+                            key={`team-label-${h}`}
+                            className="absolute left-0 w-[56px] text-right pr-3"
+                            style={{ top: (h - TEAM_START_HOUR) * HOUR_HEIGHT - 6 }}
+                          >
+                            <span className="text-[11px] text-gray-400">{formatTime(`${h}:00`)}</span>
+                          </div>
+                        ))}
+                        {hours.map(h => (
+                          <div
+                            key={`team-line-${h}`}
+                            className="absolute left-[56px] right-0 border-t border-gray-100"
+                            style={{ top: (h - TEAM_START_HOUR) * HOUR_HEIGHT }}
+                          />
+                        ))}
+
+                        {isTeamToday && currentTimeMinutes >= TEAM_START_HOUR * 60 && currentTimeMinutes <= TEAM_END_HOUR * 60 && (
+                          <div
+                            className="absolute left-[56px] right-0 z-20 flex items-center"
+                            style={{ top: ((currentTimeMinutes / 60) - TEAM_START_HOUR) * HOUR_HEIGHT }}
+                          >
+                            <div className="w-2 h-2 rounded-full bg-red-500 -ml-1" />
+                            <div className="flex-1 h-[2px] bg-red-500" />
+                          </div>
+                        )}
+
+                        {teamColumns.map((col, colIdx) => {
+                          const colEntries = teamEntriesForColumn(col.key, col.unassigned)
+                          return (
+                            <div
+                              key={col.key}
+                              className="absolute"
+                              style={{
+                                left: `calc(56px + ${colIdx} * ((100% - 56px) / ${colCount}))`,
+                                width: `calc((100% - 56px) / ${colCount})`,
+                                top: 0,
+                                height: '100%',
+                              }}
+                            >
+                              <div className="absolute inset-0 bg-gray-50/30 border-l border-gray-100" />
+                              {colEntries.map(e => {
+                                const [eh] = e.start_time.split(':').map(Number)
+                                if (eh < TEAM_START_HOUR || eh >= TEAM_END_HOUR) return null
+                                const top = timeToY(e.start_time, TEAM_START_HOUR, HOUR_HEIGHT)
+                                const height = Math.max(bookingHeight(e.start_time, e.end_time, HOUR_HEIGHT), 28)
+                                return (
+                                  <div
+                                    key={`${e.source}-${e.id}`}
+                                    className={`absolute left-1 right-1 rounded-lg px-2 py-1 text-white overflow-hidden shadow-sm z-10 ${col.unassigned ? 'ring-1 ring-amber-400' : ''}`}
+                                    style={{ top, height, background: e.color || (e.source === 'booking' ? '#015035' : '#4338ca') }}
+                                    title={`${e.title} · ${formatTime(e.start_time)}–${formatTime(e.end_time)}${e.type_name ? ` · ${e.type_name}` : ''}`}
+                                  >
+                                    <div className="text-[11px] font-semibold truncate flex items-center gap-1">
+                                      {e.meet_link && <Video className="w-3 h-3 flex-shrink-0" />}
+                                      {e.title}
+                                    </div>
+                                    {height > 30 && (
+                                      <div className="text-[10px] opacity-80 truncate">
+                                        {formatTime(e.start_time)}{e.type_name ? ` · ${e.type_name}` : ''}
+                                      </div>
+                                    )}
+                                    {/* Guest contact detail is stripped server-side for other
+                                        people's bookings below Dept Manager — show the field
+                                        only when the server says it's really visible, never a
+                                        blank line that reads as "no email on file". */}
+                                    {height > 56 && e.details_visible && e.guest_email && (
+                                      <div className="text-[10px] opacity-70 truncate">{e.guest_email}</div>
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {teamEntries.length === 0 && !teamError && (
+                        <div className="text-center py-8 text-sm text-gray-400">
+                          Nobody has bookings on this day
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>

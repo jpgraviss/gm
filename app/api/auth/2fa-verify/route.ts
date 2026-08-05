@@ -41,7 +41,7 @@ export const POST = withErrorHandler('auth/2fa-verify POST', async (req) => {
   const normalizedEmail = email.toLowerCase().trim()
 
   const security = await getSecuritySettings()
-  if (isLockedOut(normalizedEmail, security.loginAttempts)) {
+  if (await isLockedOut(normalizedEmail, security.loginAttempts)) {
     return NextResponse.json(
       { error: 'Too many failed attempts. Please wait 30 minutes and try again.' },
       { status: 429 },
@@ -73,10 +73,10 @@ export const POST = withErrorHandler('auth/2fa-verify POST', async (req) => {
 
   const valid = await verifyTwoFactorCode(member.id, String(code))
   if (!valid) {
-    recordFailedAttempt(normalizedEmail)
+    await recordFailedAttempt(normalizedEmail)
     return NextResponse.json({ error: 'Invalid or expired code' }, { status: 400 })
   }
-  clearAttempts(normalizedEmail)
+  await clearAttempts(normalizedEmail)
 
   // AUDIT.md #439 — if this browser already holds a live Supabase Auth
   // session (the magic-link path: supabase.auth.signInWithOtp() establishes

@@ -124,7 +124,7 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   // emails resolve to a real account can be probed — lock out further
   // attempts against one email after repeated "no account found" hits.
   const security = await getSecuritySettings()
-  if (isLockedOut(email, security.loginAttempts)) {
+  if (await isLockedOut(email, security.loginAttempts)) {
     return NextResponse.json(
       { error: 'Too many failed attempts for this account. Please wait 30 minutes and try again.' },
       { status: 429 },
@@ -176,7 +176,7 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
       }
     }
 
-    clearAttempts(email)
+    await clearAttempts(email)
 
     // Product decision: Google Sign-In is exempt from "Two-Factor Auth:
     // Required" — Google's own sign-in already requires the user to
@@ -271,14 +271,14 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   }
 
   if (!clientRow) {
-    recordFailedAttempt(email)
+    await recordFailedAttempt(email)
     return NextResponse.json(
       { error: `No account found for ${email}. Contact Graviss Marketing to get access.` },
       { status: 403 },
     )
   }
 
-  clearAttempts(email)
+  await clearAttempts(email)
 
   if (clientRow.access === 'Disabled') {
     return NextResponse.json(

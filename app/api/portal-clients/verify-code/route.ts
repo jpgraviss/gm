@@ -17,7 +17,7 @@ export const POST = withErrorHandler('portal-clients/verify-code POST', async (r
   // an attacker distributing guesses across IPs would otherwise bypass that
   // throttle entirely for one target account.
   const security = await getSecuritySettings()
-  if (isLockedOut(normalizedEmail, security.loginAttempts)) {
+  if (await isLockedOut(normalizedEmail, security.loginAttempts)) {
     return NextResponse.json(
       { error: 'Too many failed attempts for this account. Please wait 30 minutes and try again.' },
       { status: 429 },
@@ -45,10 +45,10 @@ export const POST = withErrorHandler('portal-clients/verify-code POST', async (r
   }
 
   if (client.verification_code !== code.trim()) {
-    recordFailedAttempt(normalizedEmail)
+    await recordFailedAttempt(normalizedEmail)
     return NextResponse.json({ error: 'Invalid verification code' }, { status: 400 })
   }
 
-  clearAttempts(normalizedEmail)
+  await clearAttempts(normalizedEmail)
   return NextResponse.json({ success: true, clientId: client.id })
 })

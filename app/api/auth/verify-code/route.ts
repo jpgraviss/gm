@@ -17,7 +17,7 @@ export const POST = withErrorHandler('auth/verify-code POST', async (req) => {
   // AUDIT.md #207 — same account-level lockout as the portal-client
   // equivalent, on top of the existing IP throttle (proxy.ts).
   const security = await getSecuritySettings()
-  if (isLockedOut(normalizedEmail, security.loginAttempts)) {
+  if (await isLockedOut(normalizedEmail, security.loginAttempts)) {
     return NextResponse.json(
       { error: 'Too many failed attempts for this account. Please wait 30 minutes and try again.' },
       { status: 429 },
@@ -59,11 +59,11 @@ export const POST = withErrorHandler('auth/verify-code POST', async (req) => {
   }
 
   if (member.verification_code !== code.toString().trim()) {
-    recordFailedAttempt(normalizedEmail)
+    await recordFailedAttempt(normalizedEmail)
     return NextResponse.json({ error: 'Invalid verification code' }, { status: 400 })
   }
 
-  clearAttempts(normalizedEmail)
+  await clearAttempts(normalizedEmail)
   const setupToken = crypto.randomBytes(32).toString('hex')
 
   // Note on AUDIT.md #504's second suggested fix ("null verification_code

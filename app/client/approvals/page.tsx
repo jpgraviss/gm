@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useClientCompany, previewFetch } from '@/lib/useClientCompany'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
 import { useToast } from '@/components/ui/Toast'
 import StatusBadge from '@/components/ui/StatusBadge'
 import LoadingScreen from '@/components/ui/LoadingScreen'
@@ -156,9 +157,13 @@ export default function ClientApprovalsPage() {
   useEffect(() => {
     if (!company) { setLoading(false); return }
     const q = encodeURIComponent(company)
+    // fetchAllPages (not a plain fetch) — both routes are cursor-paginated
+    // (default page size 100), same fix already applied to the sibling
+    // app/client/agreement/page.tsx (#474) and app/client/page.tsx (#317);
+    // this file was missed.
     Promise.all([
-      fetch(`/api/proposals?company=${q}`).then(r => r.ok ? r.json() : []).then((d: Proposal[]) => setProposals(Array.isArray(d) ? d : [])),
-      fetch(`/api/contracts?company=${q}`).then(r => r.ok ? r.json() : []).then((d: Contract[]) => setContracts(Array.isArray(d) ? d : [])),
+      fetchAllPages<Proposal>(`/api/proposals?company=${q}`).then(setProposals),
+      fetchAllPages<Contract>(`/api/contracts?company=${q}`).then(setContracts),
     ])
       .catch(() => toast('Failed to load approvals', 'error'))
       .finally(() => setLoading(false))

@@ -104,6 +104,7 @@ describe('automations-engine', () => {
     setupAutomations('Proposal Accepted', ['Create Draft Contract'])
     fireAutomations('proposal_accepted', {
       company: 'Test Company',
+      companyId: 'comp-test-1',
       proposalId: 'p-123',
       value: 50000,
       assigned_rep: 'John',
@@ -117,6 +118,7 @@ describe('automations-engine', () => {
     expect(insertCalls['contracts'][0]).toEqual(
       expect.objectContaining({
         company: 'Test Company',
+        company_id: 'comp-test-1',
         status: 'Draft',
         value: 50000,
         assigned_rep: 'John',
@@ -129,6 +131,7 @@ describe('automations-engine', () => {
     setupAutomations('Invoice Paid', ['Create Billing Task'])
     fireAutomations('invoice_paid', {
       company: 'Beta LLC',
+      companyId: 'comp-beta',
       assigned_rep: 'Tester',
     })
     await flushPromises()
@@ -140,6 +143,8 @@ describe('automations-engine', () => {
         category: 'Billing',
         status: 'Pending',
         priority: 'High',
+        company: 'Beta LLC',
+        company_id: 'comp-beta',
       }),
     )
   })
@@ -148,6 +153,7 @@ describe('automations-engine', () => {
     setupAutomations('Renewal Date Within 30 Days', ['Create Renewal Task'])
     fireAutomations('renewal_30', {
       company: 'Gamma Inc',
+      companyId: 'comp-gamma',
       assigned_rep: 'Sam',
     })
     await flushPromises()
@@ -157,6 +163,7 @@ describe('automations-engine', () => {
       expect.objectContaining({
         title: 'Create Renewal Task: Gamma Inc',
         category: 'Renewal',
+        company_id: 'comp-gamma',
       }),
     )
   })
@@ -165,6 +172,7 @@ describe('automations-engine', () => {
     setupAutomations('Contract Fully Executed', ['Create Project Record'])
     fireAutomations('contract_executed', {
       company: 'Delta Co',
+      companyId: 'comp-delta',
       service_type: 'SEO',
       contractId: 'c-456',
     })
@@ -174,6 +182,7 @@ describe('automations-engine', () => {
     expect(insertCalls['projects'][0]).toEqual(
       expect.objectContaining({
         company: 'Delta Co',
+        company_id: 'comp-delta',
         service_type: 'SEO',
         status: 'Not Started',
         progress: 0,
@@ -429,6 +438,7 @@ describe('automations-engine', () => {
     setupAutomations('Contract Sent', ['Create Maintenance Record'])
     fireAutomations('contract_sent', {
       company: 'Golf Corp',
+      companyId: 'comp-golf',
       service_type: 'Hosting',
       contractId: 'c-789',
     })
@@ -438,6 +448,7 @@ describe('automations-engine', () => {
     expect(insertCalls['maintenance_records'][0]).toEqual(
       expect.objectContaining({
         company: 'Golf Corp',
+        company_id: 'comp-golf',
         service_type: 'Hosting',
         status: 'Active',
         contract_id: 'c-789',

@@ -58,6 +58,12 @@ export const POST = withErrorHandler('stripe/webhook POST', async (req: NextRequ
         })
         .eq('id', invoiceId)
         .neq('status', 'Paid')
+        // Also excludes Cancelled — the checkout route now refuses to
+        // generate a session for a cancelled invoice, but this guards
+        // against a session created before that fix, or one still open in
+        // a stale browser tab, from silently flipping Cancelled → Paid and
+        // recording a charge no one expects to reconcile against.
+        .neq('status', 'Cancelled')
         .select()
         .maybeSingle()
 

@@ -13,7 +13,13 @@ export function normalizeDealLineItems(raw: unknown): DealLineItem[] {
     .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
     .map((item, i) => {
       const billingType: DealLineItem['billingType'] = item.billingType === 'recurring' ? 'recurring' : 'one-time'
-      const amount = Math.max(0, Number(item.amount) || 0)
+      // Number.isFinite guards against 'Infinity'/'1e400'-style input, which
+      // `Number(x) || 0` doesn't catch (Number("Infinity") is truthy) — an
+      // unclamped Infinity here would reach deals.value (numeric not null),
+      // and Postgres rejects an explicit NULL for a NOT NULL column even
+      // with a default, surfacing as an opaque 500 instead of a clamped 0.
+      const rawAmount = Number(item.amount)
+      const amount = Number.isFinite(rawAmount) ? Math.max(0, Math.min(rawAmount, 100_000_000)) : 0
       const rawTerm = Number(item.termMonths)
       return {
         id: typeof item.id === 'string' && item.id ? item.id : `li-${Date.now()}-${i}`,

@@ -13,6 +13,7 @@ import {
   LayoutList, Columns3, Eye, Copy, Mail,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import { useAuth } from '@/contexts/AuthContext'
 import { TASK_DEPARTMENTS, type TaskDepartment } from '@/lib/task-department'
 import { SERVICE_NAMES } from '@/lib/services'
 
@@ -99,12 +100,18 @@ function getTaskColumn(task: AppTask): StatusColumn {
   return task.status as StatusColumn
 }
 
-function NewTaskModal({ onSave, onClose, teamMembers }: { onSave: (t: AppTask) => void; onClose: () => void; teamMembers: TeamMember[] }) {
+function NewTaskModal({ onSave, onClose, teamMembers, currentUserName }: { onSave: (t: AppTask) => void; onClose: () => void; teamMembers: TeamMember[]; currentUserName: string }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState<AppTaskCategory>('General')
   const [priority, setPriority] = useState<TaskPriority>('Medium')
-  const [assignedTo, setAssignedTo] = useState(teamMembers[0]?.name ?? '')
+  // Defaults to the creator, not an arbitrary teamMembers[0] — a task
+  // created with a Service Line set is only visible to its assignee (see
+  // canTouchTask() in app/api/tasks/[id]/route.ts), so defaulting to
+  // someone else silently locked the creator out of their own task the
+  // moment they saved without noticing the pre-filled field. Matches the
+  // same fix already applied to time-tracking's LogTimeModal (AUDIT #364).
+  const [assignedTo, setAssignedTo] = useState(currentUserName || teamMembers[0]?.name || '')
   const [dueDate, setDueDate] = useState(getToday())
   const [company, setCompany] = useState('')
   const [department, setDepartment] = useState<TaskDepartment>('Operations')
@@ -646,6 +653,7 @@ const categories: AppTaskCategory[] = ['Deal', 'Contract', 'Billing', 'Renewal',
 
 export default function TasksPage() {
   const { toast } = useToast()
+  const { user } = useAuth()
   const searchParams = useSearchParams()
   const [tasks, setTasks] = useState<AppTask[]>([])
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
@@ -986,7 +994,7 @@ export default function TasksPage() {
         />
       )}
       {creatingTask && (
-        <NewTaskModal onSave={addTask} onClose={() => setCreatingTask(false)} teamMembers={teamMembers} />
+        <NewTaskModal onSave={addTask} onClose={() => setCreatingTask(false)} teamMembers={teamMembers} currentUserName={user?.name ?? ''} />
       )}
     </>
   )

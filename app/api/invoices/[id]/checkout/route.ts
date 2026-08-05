@@ -36,6 +36,13 @@ export const POST = withErrorHandler('invoices/[id]/checkout POST', async (req, 
   if (invoice.status === 'Paid') {
     return NextResponse.json({ error: 'This invoice has already been paid' }, { status: 400 })
   }
+  // A cancelled invoice isn't payable — without this, the client portal's
+  // Billing tab could generate a real Stripe Checkout session for one (it
+  // no longer surfaces the "Pay Now" button for Cancelled invoices, but
+  // this is the actual security boundary, not the UI hiding a button).
+  if (invoice.status === 'Cancelled') {
+    return NextResponse.json({ error: 'This invoice has been cancelled and cannot be paid' }, { status: 400 })
+  }
 
   const secretKey = await getStripeSecretKey(db)
   if (!secretKey) {

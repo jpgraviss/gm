@@ -146,7 +146,7 @@ export default function FinanceHub() {
               </p>
               <p className="text-xs text-gray-400">
                 {mercuryError.toLowerCase().includes('not configured') ? (
-                  <>Add your <code className="bg-gray-100 px-1.5 py-0.5 rounded">MERCURY_API_KEY</code> to environment variables.</>
+                  <>Ask an admin to connect it in <strong>Admin → Integrations</strong> — no developer/environment-variable access needed.</>
                 ) : mercuryError}
               </p>
             </div>

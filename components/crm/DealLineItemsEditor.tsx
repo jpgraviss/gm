@@ -70,7 +70,7 @@ export default function DealLineItemsEditor({ items, onChange }: Props) {
                 min="0"
                 placeholder="0"
                 value={item.amount || ''}
-                onChange={e => updateItem(item.id, { amount: Number(e.target.value) || 0 })}
+                onChange={e => updateItem(item.id, { amount: Math.max(0, Number(e.target.value) || 0) })}
                 className="w-full text-xs border border-gray-200 rounded-lg pl-5 pr-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
             </div>

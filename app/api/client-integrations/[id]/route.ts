@@ -66,6 +66,10 @@ export const PATCH = withErrorHandler('client-integrations/[id] PATCH', async (r
   if (error || !data) {
     throw new Error(error?.message || 'Failed to update')
   }
+  // AUDIT — POST and DELETE on this same file both log; this PATCH (rebinding
+  // which GSC/GA4/Ads/Meta/GBP account a client's reporting is bound to) didn't.
+  const actor = await getAuthUser(req)
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'client_integration_updated', module: 'integrations', type: 'action', metadata: { id, fields: Object.keys(update) } })
   return NextResponse.json(mapBinding(data))
 })
 

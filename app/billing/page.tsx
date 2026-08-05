@@ -77,7 +77,7 @@ function downloadReceipt(invoice: Invoice) {
         <p>${invoice.id.toUpperCase()}</p>
       </div>
       <div class="body">
-        <div class="amount">$${invoice.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+        <div class="amount">$${(invoice.amountPaid ?? invoice.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
         <div class="row"><span class="label">Company</span><span class="value">${invoice.company}</span></div>
         <div class="row"><span class="label">Service Type</span><span class="value">${invoice.serviceType}</span></div>
         <div class="row"><span class="label">Issued Date</span><span class="value">${invoice.issuedDate}</span></div>

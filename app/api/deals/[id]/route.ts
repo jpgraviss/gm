@@ -71,12 +71,16 @@ export const PATCH = withErrorHandler('deals/[id] PATCH', async (req, ctx) => {
   if (body.lineItems !== undefined) {
     const lineItems = normalizeDealLineItems(body.lineItems)
     update.line_items = lineItems
-    if (lineItems.length > 0) {
-      update.value = computeLineItemsTotal(lineItems)
-      const serviceTypes = serviceTypesFromLineItems(lineItems)
-      update.service_types = serviceTypes
-      update.service_type = serviceTypes[0] ?? 'General'
-    }
+    // Always recompute, even for an empty array (a user who removes every
+    // line item in the editor means the deal is worth $0, not "leave the
+    // old value alone") — previously only ran when lineItems.length > 0,
+    // which contradicted this function's own doc comment above and left a
+    // stale value/serviceTypes in the DB for any caller that sent
+    // `lineItems: []` without also explicitly sending `value`.
+    update.value = computeLineItemsTotal(lineItems)
+    const serviceTypes = serviceTypesFromLineItems(lineItems)
+    update.service_types = serviceTypes
+    update.service_type = serviceTypes[0] ?? (body.serviceType ?? 'General')
   }
   if (body.pipelineId !== undefined)  update.pipeline_id = body.pipelineId
   if (body.companyId !== undefined)   update.company_id = body.companyId

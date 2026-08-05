@@ -410,7 +410,11 @@ export default function ClientPortalPage() {
     }
   }
 
-  const openInvoices = clientInvoices.filter(i => i.status !== 'Paid')
+  // Excludes Cancelled the same way the staff Billing page's own
+  // "Copy Payment Link" affordance already does — a cancelled invoice isn't
+  // payable, but without this it counted toward the "$X outstanding —
+  // payment due" banner and got a live "Pay Now" button below.
+  const openInvoices = clientInvoices.filter(i => i.status !== 'Paid' && i.status !== 'Cancelled')
   const paidInvoices = clientInvoices.filter(i => i.status === 'Paid')
 
   if (loading) return <LoadingScreen />
@@ -801,7 +805,7 @@ export default function ClientPortalPage() {
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <p className="text-sm font-bold text-gray-900">{formatCurrency(inv.amount)}</p>
                         <StatusBadge label={inv.status} colorClass={invoiceStatusColors[inv.status]} />
-                        {inv.status !== 'Paid' && (
+                        {inv.status !== 'Paid' && inv.status !== 'Cancelled' && (
                           <button
                             onClick={() => handlePayInvoice(inv.id)}
                             disabled={payingInvoiceId === inv.id}

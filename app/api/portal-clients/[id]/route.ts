@@ -3,6 +3,8 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthenticatedEmail, requireAdmin } from '@/lib/admin-auth'
+import { getAuthUser } from '@/lib/rbac'
+import { logAudit } from '@/lib/audit'
 
 // Fields a portal client is allowed to set on their OWN record without
 // staff privileges — matches the one legitimate self-service call site
@@ -94,6 +96,15 @@ export const PATCH = withErrorHandler('portal-clients/[id] PATCH', async (req, {
   if (error) {
     throw new Error(error?.message || 'Failed to update portal client')
   }
+  // AUDIT — every sibling portal-client write (POST/DELETE /api/portal-clients,
+  // company-config PATCH, invite) logs; this staff-driven PATCH — which can
+  // reassign a portal client's company/portalRole/services/access — didn't.
+  // Not logged for the self-service branch above (lastLogin/access-touch on
+  // session restore) — that's routine traffic, not a privilege-adjacent action.
+  if (isStaff) {
+    const actor = await getAuthUser(req)
+    logAudit({ userName: actor?.name || actor?.email || 'system', action: 'updated_portal_client', module: 'portal', type: 'action', metadata: { portalClientId: id, fields: Object.keys(update) } })
+  }
   return NextResponse.json(data)
 })
 
@@ -111,5 +122,7 @@ export const DELETE = withErrorHandler('portal-clients/[id] DELETE', async (req,
   if (error) {
     throw new Error(error?.message || 'Failed to delete portal client')
   }
+  const actor = await getAuthUser(req)
+  logAudit({ userName: actor?.name || actor?.email || 'system', action: 'deleted_portal_client', module: 'portal', type: 'warning', metadata: { portalClientId: id } })
   return NextResponse.json({ deleted: id })
 })

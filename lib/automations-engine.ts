@@ -720,6 +720,13 @@ async function executeAction(
         id: `c-auto-${uid()}`,
         proposal_id: (context.proposalId as string) ?? null,
         company,
+        // Was missing on this and the 4 sibling "legacy" actions below —
+        // 7 other action handlers in this same file already resolve it
+        // this way; without it, an auto-created contract/task/project/
+        // maintenance record is invisible on the originating company's own
+        // detail-page tabs and any ?companyId=-filtered view (same bug
+        // class as AUDIT #226/#598/#634, just missed for this set).
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         status: 'Draft',
         value: (context.value as number) ?? 0,
         billing_structure: 'Monthly',
@@ -741,6 +748,8 @@ async function executeAction(
         category: action === 'Create Billing Task' ? 'Billing' : 'Renewal',
         status: 'Pending',
         priority: 'High',
+        company,
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         assigned_to: (context.assigned_rep as string) ?? '',
         due_date: today,
         created_date: today,
@@ -752,6 +761,7 @@ async function executeAction(
       await db.from('projects').insert({
         id: `proj-auto-${uid()}`,
         company,
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         service_type: (context.service_type as string) ?? 'General',
         status: 'Not Started',
         progress: 0,
@@ -765,6 +775,7 @@ async function executeAction(
       await db.from('maintenance_records').insert({
         id: `maint-auto-${uid()}`,
         company,
+        company_id: (context.companyId as string) ?? (context.company_id as string) ?? null,
         service_type: (context.service_type as string) ?? 'General',
         status: 'Active',
         contract_id: (context.contractId as string) ?? null,
@@ -963,15 +974,17 @@ async function executeAction(
       const dealId = (context.dealId as string) ?? null
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       let shouldEscalate = false
+      let dealCompanyId: string | null = null
       if (dealId) {
         const { data: deal } = await db
           .from('deals')
-          .select('last_activity, stage, company')
+          .select('last_activity, stage, company, company_id')
           .eq('id', dealId)
           .single()
         if (deal?.last_activity && new Date(deal.last_activity) < new Date(sevenDaysAgo)) {
           shouldEscalate = true
         }
+        dealCompanyId = deal?.company_id ?? null
       }
       if (shouldEscalate) {
         await db.from('app_tasks').insert({
@@ -982,6 +995,7 @@ async function executeAction(
           priority: 'High',
           status: 'Pending',
           company,
+          company_id: dealCompanyId ?? (context.companyId as string) ?? (context.company_id as string) ?? null,
           assigned_to: 'Leadership',
           due_date: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           created_date: today,

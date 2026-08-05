@@ -277,7 +277,11 @@ export function normalizeServiceType(val?: string | null, fallback?: string | nu
   if (check.includes('sales enablement') || check.includes('enablement foundation') || check.includes('enablement core') || check.includes('enablement system')) return 'Sales Enablement'
   if (check.includes('website manage')) return 'Website Management'
   if (check.includes('website') || check.includes('web design') || check.includes('web dev')) return 'Website Build'
-  if (check.includes('seo') || check.includes('aeo') || check.includes('geo')) return 'SEO / AEO / GEO'
+  // Word-boundary match, not a plain substring check — 'geo' in particular
+  // is a common substring of real company/deal names with no relation to
+  // SEO ("Georgia Outdoor Advertising" was misclassified as SEO/AEO/GEO
+  // before this fix, purely because "Georgia" contains "geo").
+  if (/\b(seo|aeo|geo)\b/.test(check)) return 'SEO / AEO / GEO'
   if (check.includes('social')) return 'Social Media'
   if (check.includes('email')) return 'Email Marketing'
   if (check.includes('brand')) return 'Branding'

@@ -116,6 +116,33 @@ here is generated output.
 
 ## Recently shipped this session
 
+- Full 8-agent audit sweep (CRM Core, Finance & Billing, Marketing &
+  Automation, Client Portal & Learning, Admin/Settings/Auth, Operations,
+  Data/AI & Misc, plus a dedicated adversarial-review agent on the last ~12
+  commits including this session's own deal line-items feature). 19 new
+  findings (`AUDIT.md` #703-721), 14 fixed directly — most notably:
+  cancelled invoices were payable through the client portal with no
+  server-side guard (checkout route + webhook both now reject them, not
+  just the UI hiding a button); `NewTaskModal` defaulted "Assign To" to an
+  arbitrary team member instead of the creator, so a self-tagged
+  service-line task could silently lock its own creator out (same fix
+  class as the existing time-tracking one, #364); 6 "legacy" automation
+  actions (draft contracts, billing/renewal/escalation tasks, projects,
+  maintenance records) were missing `company_id`, making auto-created
+  records invisible on the originating company's own page; and several
+  regressions the adversarial pass found in the deal line-items commit
+  itself — a `.includes('geo')` substring bug misclassifying company names
+  like "Georgia..." as an SEO service, a client/server negative-amount
+  clamp mismatch, and the Companies page's new quick-create buttons
+  hardcoding `companyId` instead of the form's actual selection. 5 left
+  open as genuine feature-completion/product-decision work: Sales Training
+  has no client self-enrollment path at all (High — a real gap, not a
+  polish item), the renewals sidebar's monthly/total math needs the
+  renewal's own term field traced first, AI-fallback labeling needs new
+  UI, per-service revenue reporting needs a broader design for multi-service
+  deals, and `NewProposalPanel` needs a `companyId` field added (a
+  pre-existing, lower-risk sibling of the just-fixed New Deal/Contract
+  bug). See `AUDIT.md`'s 2026-08-05 coverage note for the full breakdown.
 - Multi-service support on Projects — checkboxes in the New Project and
   Project Settings modals, `serviceTypes[]` wired through create/edit/
   display end to end.

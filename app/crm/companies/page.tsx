@@ -1612,7 +1612,13 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 company: data.company,
-                companyId: company.id,
+                // data.companyId (not the panel's own `company.id`) reflects
+                // what's actually selected in the form's Company dropdown —
+                // initialCompany/initialCompanyId only pre-fill it, they
+                // don't lock it, so a user who changes the company before
+                // saving must not have the deal silently attributed back to
+                // this panel's original company.
+                companyId: data.companyId ?? company.id,
                 contact: { id: `contact-${Date.now()}`, name: data.contactName, email: data.contactEmail, phone: data.contactPhone, title: data.contactTitle },
                 stage: data.stage,
                 lineItems: data.lineItems,
@@ -1659,7 +1665,10 @@ function CompanyPanel({ company, onClose, onEdit, onDelete, onOpenIntegrations, 
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 company: data.company,
-                companyId: company.id,
+                // See matching comment in the New Deal handler above — use
+                // what the form actually has selected, not the panel's
+                // original company, in case the user changed it.
+                companyId: data.companyId ?? company.id,
                 status: 'Draft',
                 value: Number(data.value),
                 serviceType: data.serviceType,

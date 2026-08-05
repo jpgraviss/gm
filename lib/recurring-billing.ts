@@ -150,6 +150,11 @@ export async function generateRecurringInvoices(
     .from('contracts')
     .select('id, company, company_id, value, billing_structure, start_date, renewal_date, service_type, status')
     .eq('status', 'Fully Executed')
+    // Supabase caps an unbounded select at 1000 rows, and a silently
+    // truncated list here means a client simply never gets invoiced. Same
+    // defensive ceiling app/api/dashboard/route.ts uses; ~30 real contracts
+    // today, so this is headroom rather than a live constraint.
+    .limit(5000)
 
   for (const contract of (contracts ?? []) as Record<string, unknown>[]) {
     result.contractsChecked++
@@ -219,6 +224,7 @@ export async function generateRecurringInvoices(
     .from('maintenance_records')
     .select('id, company, company_id, contract_id, monthly_fee, next_billing_date, service_type, status, end_date')
     .eq('status', 'Active')
+    .limit(5000)
 
   for (const record of (maintenance ?? []) as Record<string, unknown>[]) {
     result.maintenanceChecked++

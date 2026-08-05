@@ -91,6 +91,23 @@ here is generated output.
 
 ## Pending user action (delivered, not yet confirmed run)
 
+- **`20260805120000_add_serpapi_settings_column.sql`** — adds
+  `app_settings.serpapi jsonb`. Optional: with no SerpApi key configured the
+  rank tracker falls back to Google Search Console exactly as before, so
+  this is safe to apply whether or not the SERP provider is ever paid for.
+  Until it runs, saving a SerpApi key in Admin → Integrations will fail.
+- **`20260805130000_add_booking_type_owner.sql`** — adds
+  `booking_types.owner_calendar_slug` (AUDIT #699). Until it runs, the
+  calendar-sync loop still pushes every pending public booking to whichever
+  staff Google Calendar processes first. **After applying, assign an owner
+  to each booking type in the editor** — a NULL owner is deliberately
+  skipped rather than falling back to the old random-calendar behavior.
+- **`20260805140000_add_rate_limit_counters.sql`** — adds the
+  `rate_limit_counters` table + `increment_rate_limit_counter()` RPC that
+  back durable account lockout (AUDIT #722). Not urgent: `login-attempts.ts`
+  keeps its in-process Map as a second layer, so until this runs, lockout
+  degrades to exactly the old per-instance behavior rather than breaking.
+
 - **`asana_import_v4_migrate_to_app_tasks.sql`** — moves the 55 Asana tasks
   out of the dead `projects.tasks` JSONB into real `app_tasks` rows with
   `project_id` set, so they actually render on each project's task board.
@@ -105,14 +122,9 @@ here is generated output.
   correctly scoped, and list/download dual-read the legacy folder so
   nothing's invisible in the meantime — but pre-existing files stay under
   their old (collision-prone) path until this script actually runs.
-- **`add_deals_line_items.sql`** — adds `deals.line_items jsonb not null
-  default '[]'`. Same live-DB-drift risk class as the `service_types` fix
-  a few entries up: the code (`app/api/deals/route.ts`,
-  `app/api/deals/[id]/route.ts`) unconditionally reads/writes this column
-  the moment a deal is saved with line items, so until this runs, saving a
-  deal with `lineItems` will 500 exactly like the `service_types` bug did.
-  Delivered to the user directly in chat per this repo's established
-  "paste SQL in chat" convention; no confirmation yet as of this writing.
+- ~~**`add_deals_line_items.sql`**~~ — **confirmed run.** The user reported
+  "success" on this one at the start of the following session, so
+  `deals.line_items jsonb` is live and deal line items work end to end.
 
 ## Recently shipped this session
 
@@ -240,6 +252,38 @@ here is generated output.
     proposals could *already* be created from the company page before this
     session — only deals and contracts were actually missing that entry
     point.
+
+- **Cross-module integration pass** (the organizing theme of this session,
+  after the user's "all of the features and services need to be connected to
+  each other"). The finding underneath it: this app's individual modules are
+  unusually mature, but they barely talked to each other. Built:
+  - `lib/activity-log.ts` — makes `crm_activities` genuinely unified.
+    Finance, Delivery/Ops, and Support never wrote to it at all, so a
+    company's "Activity" tab was an email-and-proposal log wearing a
+    unified-timeline label.
+  - `lib/delivery-sync.ts` (AUDIT #723) — the 8-step Delivery Workflow now
+    advances from real events (contract fully executed → step 1, invoice
+    paid → step 2, portal login → step 4), wired at BOTH entry points for
+    each event. Forward-only, idempotent, never throws. Was previously
+    written by exactly one place, so it was a checklist someone had to
+    remember to tick.
+  - `lib/automations-engine.ts` — new `Create Invoice` action (no
+    invoice-creation action existed at all), new triggers for Delivery/Ops
+    and Support (which had none), and `company_id` added to 6 legacy actions.
+  - `lib/recurring-billing.ts`, `lib/company-match.ts`, `lib/deal-reporting.ts`,
+    `lib/renewal-pricing.ts`, `lib/serp-provider.ts` + competitor rank
+    snapshots, self-enrollment for courses, and the Company Panel's four new
+    tabs (Proposals / Invoices / Projects / Tickets).
+- **Durable account lockout** (AUDIT #722) — `lib/login-attempts.ts`'s
+  counters moved from an in-process Map to Postgres. On Vercel the Map was
+  effectively free to reset by hitting a different instance. Postgres, not
+  Redis/Upstash, on purpose: Supabase is already here.
+- **Judgment calls made without asking**, per the user's "go with your
+  recommendations": corrected the OAuth-expiry doc rather than extending the
+  180-day policy to Calendar (forcing expiry would silently break an
+  unattended cron sync); skipped unassigned booking types rather than
+  falling back to a random calendar; refused to invent a renewal term-length
+  divisor and made the UI honest instead (AUDIT #707).
 
 ## Where to look first
 

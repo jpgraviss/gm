@@ -6,6 +6,7 @@ import { getSettings } from '@/lib/settings'
 import { shouldSendPushForEvent } from '@/lib/notification-preferences'
 import { contractMonthlyValue } from '@/lib/metrics'
 import { contractPeriodAmount, isRecurringStructure } from '@/lib/recurring-billing'
+import { sendInvoiceEmail } from '@/lib/invoice-send'
 import { getFirstPipelineStageName } from '@/lib/pipelines'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -854,8 +855,9 @@ async function executeAction(
       const dueDate = new Date(Date.now() + dueOffsetDays * 24 * 60 * 60 * 1000)
         .toISOString().split('T')[0]
 
+      const newInvoiceId = `inv-auto-${uid()}`
       await db.from('invoices').insert({
-        id: `inv-auto-${uid()}`,
+        id: newInvoiceId,
         company: invCompany,
         company_id: invCompanyId,
         // The field every existing invoice-creation path leaves null.
@@ -868,6 +870,36 @@ async function executeAction(
         service_type: invServiceType,
         source: 'automation',
       })
+
+      // Optional delivery, off by default. An automation that silently
+      // emailed a client without the operator asking for it would be a bad
+      // surprise, so this only fires when the action is explicitly
+      // configured to — but without it an auto-created invoice sits Pending
+      // forever, never delivered and (since the cron's overdue sweep only
+      // looks at 'Sent') never aged or chased either.
+      if (context.sendInvoice === true || context.sendInvoice === 'true') {
+        const sent = await sendInvoiceEmail(newInvoiceId, { actorName: 'Automation' }, db)
+        if (!sent.ok) {
+          console.warn(`[automations-engine] Create Invoice: ${newInvoiceId} created but not sent — ${sent.error}`)
+        }
+      }
+      break
+    }
+
+    // Sends an invoice that already exists — the counterpart to Create
+    // Invoice's opt-in delivery, for flows that raise the invoice elsewhere
+    // (the retainer cron, a staff member) and want the automation to handle
+    // getting it to the client.
+    case 'Send Invoice': {
+      const targetInvoiceId = (context.invoiceId as string) ?? (context.invoice_id as string) ?? null
+      if (!targetInvoiceId) {
+        console.warn('[automations-engine] Send Invoice skipped — no invoice in the trigger context')
+        break
+      }
+      const sent = await sendInvoiceEmail(targetInvoiceId, { actorName: 'Automation' }, db)
+      if (!sent.ok) {
+        console.warn(`[automations-engine] Send Invoice failed for ${targetInvoiceId} — ${sent.error}`)
+      }
       break
     }
 

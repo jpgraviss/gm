@@ -95,6 +95,7 @@ function downloadReceipt(invoice: Invoice) {
 function InvoicePanel({ invoice, onClose, onUpdate, contracts, allInvoices }: { invoice: Invoice; onClose: () => void; onUpdate: (id: string, patch: Partial<Invoice>) => void; contracts: Contract[]; allInvoices: Invoice[] }) {
   const { toast } = useToast()
   const [generatingLink, setGeneratingLink] = useState(false)
+  const [sending, setSending] = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const linkedContract = contracts.find(c => c.id === invoice.contractId)
   const relatedInvoices = allInvoices.filter(i => i.contractId === invoice.contractId && i.id !== invoice.id)
@@ -133,6 +134,38 @@ function InvoicePanel({ invoice, onClose, onUpdate, contracts, allInvoices }: { 
       toast('Failed to update invoice status. Please try again.', 'error')
     } finally {
       setUpdatingStatus(false)
+    }
+  }
+
+  // Emails the invoice to the client's billing contact and moves it
+  // Pending → Sent. Until this existed there was no way to send an invoice
+  // from the app at all — 'Sent' could only be reached by hand-editing the
+  // status after emailing it from somewhere else, which meant the whole
+  // overdue/dunning pipeline downstream of it started from a status nothing
+  // ever set on its own.
+  async function handleSendInvoice() {
+    if (!confirm(`Email this invoice to ${invoice.company}'s billing contact?`)) return
+    setSending(true)
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/send`, { method: 'POST' })
+      const data = await res.json()
+      if (!res.ok) {
+        toast(data.error || 'Failed to send the invoice', 'error')
+        return
+      }
+      // statusUnchanged means it was already Sent or Overdue — a resend, not
+      // a first send. Say which happened rather than implying a state change
+      // that didn't occur.
+      if (data.statusUnchanged) {
+        toast(`Invoice re-sent to ${data.recipient}`, 'success')
+      } else {
+        onUpdate(invoice.id, { status: 'Sent' })
+        toast(`Invoice sent to ${data.recipient}`, 'success')
+      }
+    } catch {
+      toast('Failed to send the invoice. Please try again.', 'error')
+    } finally {
+      setSending(false)
     }
   }
 
@@ -286,6 +319,18 @@ function InvoicePanel({ invoice, onClose, onUpdate, contracts, allInvoices }: { 
                 {updatingStatus ? 'Updating...' : 'Mark as Paid'}
               </button>
             </div>
+          )}
+          {invoice.status !== 'Paid' && invoice.status !== 'Cancelled' && (
+            <button
+              onClick={handleSendInvoice}
+              disabled={sending}
+              className="w-full py-2 mb-2 rounded-xl text-white text-xs font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ background: '#012b1e' }}
+            >
+              {sending
+                ? 'Sending...'
+                : invoice.status === 'Pending' ? 'Send Invoice to Client' : 'Re-send Invoice'}
+            </button>
           )}
           <div className="flex gap-2">
             {invoice.status === 'Paid' && (

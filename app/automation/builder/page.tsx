@@ -10,7 +10,7 @@ import {
   X, Play, Pause, ZoomIn, ZoomOut, Maximize2,
   FileText, CheckCircle, ChevronRight, Check, AlertCircle, Loader2,
   Edit3, Copy, Webhook, RefreshCw, Flag, DollarSign, LayoutTemplate, Globe,
-  Ticket,
+  Ticket, Send,
 } from 'lucide-react'
 
 // AUDIT.md #425 — TriggerType/ActionType (and TRIGGER_TO_DB/ACTION_TO_DB
@@ -35,7 +35,7 @@ type ActionType =
   | 'send_email' | 'send_followup_email'
   | 'update_contact' | 'create_deal' | 'add_tag' | 'remove_tag' | 'rotate_owner'
   | 'create_task' | 'log_activity' | 'send_notification'
-  | 'create_draft_contract' | 'create_invoice' | 'create_billing_task' | 'create_renewal_task'
+  | 'create_draft_contract' | 'create_invoice' | 'send_invoice' | 'create_billing_task' | 'create_renewal_task'
   | 'create_project_record' | 'create_maintenance_record'
   | 'notify_sales_rep' | 'notify_finance_team' | 'notify_delivery_team' | 'notify_assigned_rep'
   | 'log_touchpoint' | 'flag_in_dashboard' | 'update_revenue_metrics'
@@ -93,6 +93,7 @@ const ACTION_CATEGORIES: { label: string; actions: { value: ActionType; label: s
     actions: [
       { value: 'create_draft_contract',    label: 'Create Draft Contract',     icon: <FileText size={18} />,     description: 'Create a draft contract record' },
       { value: 'create_invoice',           label: 'Create Invoice',            icon: <DollarSign size={18} />,   description: 'Create a pending invoice — pulls amount and service from the linked contract when there is one' },
+      { value: 'send_invoice',             label: 'Send Invoice',              icon: <Send size={18} />,         description: "Email an existing invoice to the client's billing contact, with a Stripe payment link when Stripe is connected" },
       { value: 'create_billing_task',      label: 'Create Billing Task',       icon: <ListTodo size={18} />,     description: 'Create a task for the billing/finance team' },
       { value: 'create_renewal_task',      label: 'Create Renewal Task',       icon: <Clock size={18} />,        description: 'Create a task to handle an upcoming renewal' },
       { value: 'create_maintenance_record', label: 'Create Maintenance Record', icon: <RefreshCw size={18} />,   description: 'Create a maintenance record for the account' },
@@ -174,6 +175,7 @@ const ACTION_TO_DB: Record<ActionType, string> = {
   send_notification:     'Send Notification',
   create_draft_contract:    'Create Draft Contract',
   create_invoice:           'Create Invoice',
+  send_invoice:             'Send Invoice',
   create_billing_task:      'Create Billing Task',
   create_renewal_task:      'Create Renewal Task',
   create_project_record:    'Create Project Record',

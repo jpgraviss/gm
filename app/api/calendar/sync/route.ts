@@ -151,9 +151,23 @@ export const POST = withErrorHandler('calendar/sync POST', async (req) => {
         }
       }
 
+      // AUDIT #699 — this had NO scoping filter, so whichever staff Google
+      // Calendar happened to process first in a given run received every
+      // pending public booking, and if that person later disconnected,
+      // subsequent batches silently landed on whoever processed next.
+      // Non-deterministic and a real risk of a missed client meeting.
+      // `booking_types.owner_calendar_slug` now names the owning calendar
+      // (see the migration), matching how the legacy `bookings` push above
+      // already scopes by `calendar_slug`.
+      //
+      // A booking type with NO owner assigned is deliberately skipped
+      // rather than falling back to the old behavior: a booking that
+      // visibly doesn't sync is far easier to notice and fix than one that
+      // silently lands on the wrong person's calendar.
       const { data: unpushedTyped } = await db
         .from('booking_type_bookings')
-        .select('*, booking_types(name, slug)')
+        .select('*, booking_types!inner(name, slug, owner_calendar_slug)')
+        .eq('booking_types.owner_calendar_slug', cal.slug)
         .is('google_event_id', null)
         .eq('status', 'confirmed')
 

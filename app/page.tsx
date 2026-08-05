@@ -11,6 +11,7 @@ import {
   Wrench, MessageSquare, CheckSquare, Clock,
   ChevronDown, Mail, Send, Eye, BarChart3, Target,
   Briefcase, Users, Brain, Sparkles,
+  AlertTriangle, LifeBuoy,
 } from 'lucide-react'
 import { formatCurrency, contractStatusColors, invoiceStatusColors } from '@/lib/utils'
 import StatusBadge from '@/components/ui/StatusBadge'
@@ -332,6 +333,15 @@ interface DashboardData {
     deals30d: number
     contracts30d: number
     invoices30d: number
+    // Delivery + Support + proposal health — the dashboard previously never
+    // queried projects/tickets/proposals at all, so the first screen anyone
+    // sees on login was a finance-and-pipeline-only view of the business.
+    activeProjects: number
+    atRiskProjects: number
+    openTickets: number
+    urgentTickets: number
+    pendingProposals: number
+    pendingProposalValue: number
   }
   recentDeals: Array<{ id: string; company: string; stage: string; value: number; serviceType: string; lastActivity: string }>
   recentContracts: Array<{ id: string; company: string; status: string; value: number; renewalDate: string; serviceType: string }>
@@ -342,7 +352,7 @@ interface DashboardData {
 }
 
 const emptyData: DashboardData = {
-  metrics: { activeClients: 0, openDeals: 0, pipelineValue: 0, totalCollected: 0, overdueInvoices: 0, upcomingRenewals: 0, totalInvoiced: 0, totalOverdue: 0, totalPending: 0, winRate: 0, avgDealSize: 0, totalDealValue: 0, deals30d: 0, contracts30d: 0, invoices30d: 0 },
+  metrics: { activeClients: 0, openDeals: 0, pipelineValue: 0, totalCollected: 0, overdueInvoices: 0, upcomingRenewals: 0, totalInvoiced: 0, totalOverdue: 0, totalPending: 0, winRate: 0, avgDealSize: 0, totalDealValue: 0, deals30d: 0, contracts30d: 0, invoices30d: 0, activeProjects: 0, atRiskProjects: 0, openTickets: 0, urgentTickets: 0, pendingProposals: 0, pendingProposalValue: 0 },
   recentDeals: [],
   recentContracts: [],
   recentInvoices: [],
@@ -668,8 +678,19 @@ function SalesView({ data }: { data: DashboardData }) {
         <KpiCard label="Open Deals"     value={String(m.openDeals)}             icon={<Target size={17} />}      accent="#8b5cf6"  sub="In progress"     href="/crm/pipeline" />
         <KpiCard label="Win Rate"       value={`${m.winRate}%`}                 icon={<CheckCircle size={17} />} accent="#22c55e"  sub="Of decided deals" />
         <KpiCard label="Avg Deal"       value={formatCurrency(m.avgDealSize)}   icon={<DollarSign size={17} />}  accent="#015035"  sub="Closed won avg" />
-        <KpiCard label="Proposals"      value={String(data.recentContracts.filter(c => c.status === 'Draft' || c.status === 'Sent').length)} icon={<FileText size={17} />} accent="#f59e0b" sub="Pending" href="/proposals" />
+        {/* Was derived from recentContracts (a contract is not a proposal) —
+            now a real count of proposals actually out with clients. */}
+        <KpiCard label="Proposals Out"  value={String(m.pendingProposals)}      icon={<FileText size={17} />}    accent="#f59e0b"  sub={m.pendingProposalValue > 0 ? formatCurrency(m.pendingProposalValue) : 'Awaiting reply'} href="/proposals" />
         <KpiCard label="Renewals"       value={String(m.upcomingRenewals)}      icon={<RefreshCw size={17} />}   accent="#ef4444"  sub="Due in 60d"      href="/renewals" />
+      </div>
+
+      {/* Delivery + Support — previously absent from this dashboard entirely,
+          so stalled projects and escalating tickets were invisible here. */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KpiCard label="Active Projects" value={String(m.activeProjects)}  icon={<FolderKanban size={17} />} accent="#0891b2" sub="In delivery"                                      href="/projects" />
+        <KpiCard label="At-Risk"         value={String(m.atRiskProjects)}  icon={<AlertTriangle size={17} />} accent={m.atRiskProjects > 0 ? '#ef4444' : '#94a3b8'} sub="Blocked or at risk" href="/projects" />
+        <KpiCard label="Open Tickets"    value={String(m.openTickets)}     icon={<LifeBuoy size={17} />}     accent="#db2777" sub="Unresolved"                                       href="/tickets" />
+        <KpiCard label="Urgent Tickets"  value={String(m.urgentTickets)}   icon={<AlertTriangle size={17} />} accent={m.urgentTickets > 0 ? '#ef4444' : '#94a3b8'} sub="High or urgent"    href="/tickets" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

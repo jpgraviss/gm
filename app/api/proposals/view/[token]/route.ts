@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { fireAutomations } from '@/lib/automations-engine'
+import { logActivity } from '@/lib/activity-log'
 
 export const GET = withErrorHandler('proposals/view/[token] GET', async (_req, ctx) => {
   const { token } = await ctx!.params
@@ -136,6 +137,51 @@ export const PATCH = withErrorHandler('proposals/view/[token] PATCH', async (req
     status: newStatus,
     clientNotes: clientNotes || null,
   })
+
+  // Asymmetry fix: the internal "Mark Accepted" button in
+  // app/proposals/page.tsx has always created a Draft contract directly,
+  // but THIS route — the one real clients actually use, via the emailed
+  // link — only fired an automation, so a contract appeared only if a staff
+  // member had separately hand-built one. Since client acceptance is by far
+  // the dominant path, "a won proposal becomes a draft contract" silently
+  // didn't happen for most real wins. Mirrors the staff path's payload
+  // exactly. Best-effort: a contract-creation failure must not undo the
+  // client's acceptance, which is already committed above.
+  if (action === 'accept') {
+    try {
+      const startDate = new Date().toISOString().split('T')[0]
+      const renewalDate = new Date(new Date().setFullYear(new Date().getFullYear() + 1))
+        .toISOString().split('T')[0]
+      const { error: contractErr } = await db.from('contracts').insert({
+        id: `c-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        proposal_id: proposal.id,
+        company: proposal.company,
+        company_id: proposal.company_id ?? null,
+        status: 'Draft',
+        value: proposal.value ?? 0,
+        billing_structure: 'Monthly',
+        start_date: startDate,
+        duration: 12,
+        renewal_date: renewalDate,
+        assigned_rep: proposal.assigned_rep ?? '',
+        service_type: proposal.service_type ?? 'General',
+      })
+      if (contractErr) {
+        console.error('[proposals/view] draft contract creation failed:', contractErr.message)
+      } else {
+        logActivity({
+          type: 'proposal',
+          title: `Proposal accepted — draft contract created`,
+          body: `${proposal.service_type ?? 'General'} · ${proposal.value ?? 0}`,
+          companyId: proposal.company_id ?? null,
+          companyName: proposal.company,
+          outcome: 'success',
+        })
+      }
+    } catch (err) {
+      console.error('[proposals/view] draft contract creation threw:', err instanceof Error ? err.message : err)
+    }
+  }
 
   return NextResponse.json({ success: true, status: newStatus })
 })

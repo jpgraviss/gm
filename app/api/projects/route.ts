@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { validate, validationError, PROJECT_STATUSES } from '@/lib/validation'
+import { validate, validationError, parseNullableNumber, PROJECT_STATUSES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
@@ -36,25 +36,6 @@ function mapProject(row: any) {
   }
 }
 
-/**
- * budget_amount / estimated_hours parsing, shared by POST here and PATCH in
- * ./[id]/route.ts (exported so the two can't drift).
- *
- * Accepts a number or a numeric string (what a form input yields). `null`
- * and `''` mean "clear it" and map to SQL NULL — the "not tracked" state,
- * which is deliberately distinct from 0 ("budgeted zero"). `undefined` means
- * the caller didn't mention the field, so it's left untouched. Anything else
- * is rejected rather than silently coerced or dropped.
- */
-export function parseNullableNumber(
-  value: unknown,
-): { ok: true; value: number | null | undefined } | { ok: false } {
-  if (value === undefined) return { ok: true, value: undefined }
-  if (value === null || value === '') return { ok: true, value: null }
-  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN
-  if (!Number.isFinite(n) || n < 0) return { ok: false }
-  return { ok: true, value: n }
-}
 
 export const GET = withErrorHandler('projects GET', async (req) => {
   const { searchParams } = new URL(req.url)
@@ -101,6 +82,11 @@ export const POST = withErrorHandler('projects POST', async (req) => {
   })
   if (!result.valid) return validationError(result.error)
 
+  const budgetAmount = parseNullableNumber(body.budgetAmount)
+  if (!budgetAmount.ok) return validationError('budgetAmount must be a non-negative number or null')
+  const estimatedHours = parseNullableNumber(body.estimatedHours)
+  if (!estimatedHours.ok) return validationError('estimatedHours must be a non-negative number or null')
+
   const serviceTypes: string[] = Array.isArray(body.serviceTypes) && body.serviceTypes.length > 0
     ? body.serviceTypes
     : body.serviceType ? [body.serviceType] : ['General']
@@ -137,6 +123,9 @@ export const POST = withErrorHandler('projects POST', async (req) => {
       sections:      body.sections ?? ['To Do', 'In Progress', 'Done'],
       color:         body.color ?? '#015035',
       description:   body.description ?? '',
+      // `?? null` keeps "not tracked" as NULL rather than 0.
+      budget_amount:   budgetAmount.value ?? null,
+      estimated_hours: estimatedHours.value ?? null,
     })
     .select()
     .single()

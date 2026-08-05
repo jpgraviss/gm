@@ -136,6 +136,11 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
   const [launchDate, setLaunchDate] = useState('')
   const [projectStatus, setProjectStatus] = useState<ProjectStatus>('Not Started')
   const [selectedTeam, setSelectedTeam] = useState<string[]>([])
+  // Kept as strings so an untouched field stays '' — which the API maps to
+  // SQL NULL ("not tracked"), not 0. A project created without them looks
+  // exactly as it did before this feature existed.
+  const [budgetAmount, setBudgetAmount] = useState('')
+  const [estimatedHours, setEstimatedHours] = useState('')
   const [saving, setSaving] = useState(false)
 
   const canSave = company.trim()
@@ -156,6 +161,8 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
       progress: 0,
       milestones: [],
       tasks: [],
+      budgetAmount: budgetAmount.trim() === '' ? null : Number(budgetAmount),
+      estimatedHours: estimatedHours.trim() === '' ? null : Number(estimatedHours),
     }
     try {
       const res = await fetch('/api/projects', {
@@ -220,6 +227,20 @@ function NewProjectModal({ onClose, onSave }: { onClose: () => void; onSave: (p:
             <div>
               <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Launch Date</label>
               <input type="date" value={launchDate} onChange={e => setLaunchDate(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Budget ($)</label>
+              <input type="number" min="0" step="0.01" value={budgetAmount} onChange={e => setBudgetAmount(e.target.value)}
+                placeholder="Optional"
+                className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Est. Hours</label>
+              <input type="number" min="0" step="0.25" value={estimatedHours} onChange={e => setEstimatedHours(e.target.value)}
+                placeholder="Optional"
                 className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:border-green-700" />
             </div>
           </div>

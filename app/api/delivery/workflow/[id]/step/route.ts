@@ -2,22 +2,16 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
-import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
+import { DELIVERY_STEP_NAMES, DELIVERY_STEP_COLUMNS } from '@/lib/delivery-steps'
 import { requireRole } from '@/lib/rbac'
 import { mapWorkflow } from '../../route'
 
 const STEP_STATUSES = ['Pending', 'In Progress', 'Completed', 'Skipped']
 
-const STEP_COLUMNS: Record<number, { status: string; meta: string[] }> = {
-  1: { status: 'step_01_agreement', meta: ['step_01_contract_id', 'step_01_completed_at'] },
-  2: { status: 'step_02_invoice', meta: ['step_02_invoice_id', 'step_02_completed_at'] },
-  3: { status: 'step_03_welcome', meta: ['step_03_email_sent_at', 'step_03_opened_at'] },
-  4: { status: 'step_04_portal', meta: ['step_04_first_login'] },
-  5: { status: 'step_05_strategy_call', meta: ['step_05_booking_id', 'step_05_completed_at', 'step_05_notes'] },
-  6: { status: 'step_06_usage_guide', meta: ['step_06_email_sent_at', 'step_06_opened_at'] },
-  7: { status: 'step_07_fulfillment', meta: ['step_07_deliverables', 'step_07_completed_at'] },
-  8: { status: 'step_08_monthly_report', meta: ['step_08_last_sent_at', 'step_08_send_day'] },
-}
+// Shared with lib/delivery-sync.ts, which writes the same columns from
+// Contracts / Finance / Portal events — two copies of this map would drift
+// the first time a column is renamed.
+const STEP_COLUMNS = DELIVERY_STEP_COLUMNS
 
 const META_KEY_MAP: Record<string, string> = {
   contractId: 'step_01_contract_id',

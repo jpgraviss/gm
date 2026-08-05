@@ -4,6 +4,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { buildSessionCookie, sessionTimeoutToSeconds, type SessionPayload } from '@/lib/session-cookie'
 import { getSecuritySettings } from '@/lib/settings'
 import { isLockedOut, recordFailedAttempt, clearAttempts } from '@/lib/login-attempts'
+import { onPortalFirstLogin } from '@/lib/delivery-sync'
 
 async function respondWithUser(user: SessionPayload & { name: string; unit: string; initials: string; avatar?: string; company?: string }) {
   const res = NextResponse.json({ user })
@@ -262,7 +263,7 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
   // ── 3. Check portal_clients (external clients) ──
   const { data: clientRow, error: clientErr } = await db
     .from('portal_clients')
-    .select('id, email, company, contact, service, access, pending_approval')
+    .select('id, email, company, company_id, contact, service, access, pending_approval')
     .ilike('email', email)
     .maybeSingle()
 
@@ -299,6 +300,10 @@ export const POST = withErrorHandler('auth/google-verify POST', async (req) => {
       { status: 403 },
     )
   }
+
+  // Delivery step 4 ("Portal Access") — see the matching call in
+  // app/api/auth/session/route.ts.
+  onPortalFirstLogin(clientRow)
 
   const names = (clientRow.contact ?? '').split(' ')
   return respondWithUser({

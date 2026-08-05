@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
-import { validate, validationError, PROJECT_STATUSES } from '@/lib/validation'
+import { validate, validationError, parseNullableNumber, PROJECT_STATUSES } from '@/lib/validation'
 import { logAudit } from '@/lib/audit'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { withErrorHandler } from '@/lib/api-handler'
@@ -29,6 +29,10 @@ function mapProject(row: any) {
     sections:             row.sections ?? ['To Do', 'In Progress', 'Done'],
     color:                row.color ?? '#015035',
     description:          row.description ?? '',
+    // Null means "not tracked", never 0 — see the matching note in
+    // ../route.ts's mapper.
+    budgetAmount:         row.budget_amount ?? null,
+    estimatedHours:       row.estimated_hours ?? null,
   }
 }
 
@@ -104,6 +108,19 @@ export const PATCH = withErrorHandler('projects/[id] PATCH', async (req, ctx) =>
   }
   if (body.company !== undefined)              update.company = body.company
   if (body.companyId !== undefined)            update.company_id = body.companyId
+  // Budget/estimate: an explicit null (or '') clears the field back to "not
+  // tracked" — that has to stay reachable, so these can't use the
+  // `body.x || null` shorthand, which would also swallow a legitimate 0.
+  if (body.budgetAmount !== undefined) {
+    const parsed = parseNullableNumber(body.budgetAmount)
+    if (!parsed.ok) return validationError('budgetAmount must be a non-negative number or null')
+    update.budget_amount = parsed.value ?? null
+  }
+  if (body.estimatedHours !== undefined) {
+    const parsed = parseNullableNumber(body.estimatedHours)
+    if (!parsed.ok) return validationError('estimatedHours must be a non-negative number or null')
+    update.estimated_hours = parsed.value ?? null
+  }
   const { data, error } = await db.from('projects').update(update).eq('id', id).select().single()
   if (error) {
     throw new Error(error?.message || 'Failed to update project')

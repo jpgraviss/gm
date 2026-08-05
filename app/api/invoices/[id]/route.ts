@@ -6,6 +6,7 @@ import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { logActivity } from '@/lib/activity-log'
+import { onInvoicePaid } from '@/lib/delivery-sync'
 import { formatUsd } from '@/lib/format-currency'
 
 // PATCH updates invoice status/payment data
@@ -90,6 +91,9 @@ export const PATCH = withErrorHandler('invoices/[id] PATCH', async (req, { param
 
   if (body.status === 'Paid') {
     fireAutomations('invoice_paid', { invoiceId: id, ...data })
+    // Delivery step 2 ("Invoice & Payment") — mirrors the Stripe webhook,
+    // which is the other way an invoice reaches Paid.
+    onInvoicePaid(data)
   } else if (body.status === 'Overdue') {
     fireAutomations('invoice_overdue', { invoiceId: id, ...data })
   }

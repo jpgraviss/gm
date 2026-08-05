@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { buildSessionCookie, verifySessionCookie, sessionTimeoutToSeconds, REMEMBER_ME_SECONDS, SESSION_COOKIE_NAME } from '@/lib/session-cookie'
 import { getSecuritySettings } from '@/lib/settings'
+import { onPortalFirstLogin } from '@/lib/delivery-sync'
 import { sendTwoFactorCode } from '@/lib/two-factor'
 
 /**
@@ -139,7 +140,7 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
 
   const { data: clientRow } = await db
     .from('portal_clients')
-    .select('id, email, access, pending_approval')
+    .select('id, email, company, company_id, access, pending_approval')
     .ilike('email', email)
     .maybeSingle()
 
@@ -168,6 +169,11 @@ export const POST = withErrorHandler('auth/session POST', async (req) => {
     : null
   const rememberMe = requestedRememberMe === true || existingClientCookieForThisUser?.rememberMe === true
   const clientMaxAgeSeconds = rememberMe ? REMEMBER_ME_SECONDS : sessionTimeoutToSeconds(security.sessionTimeout)
+
+  // Delivery step 4 ("Portal Access") — one of three routes that can
+  // establish a client session, all three wired so which one a client
+  // happens to use doesn't decide whether their onboarding board is right.
+  onPortalFirstLogin(clientRow)
 
   const res = NextResponse.json({ ok: true })
   res.cookies.set(await buildSessionCookie({

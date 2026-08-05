@@ -4,6 +4,7 @@ import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 import { buildSessionCookie, sessionTimeoutToSeconds } from '@/lib/session-cookie'
 import { getSecuritySettings } from '@/lib/settings'
+import { onPortalFirstLogin } from '@/lib/delivery-sync'
 
 export const POST = withErrorHandler('portal-clients/magic-link/verify POST', async (req) => {
   const { token } = await req.json()
@@ -33,7 +34,7 @@ export const POST = withErrorHandler('portal-clients/magic-link/verify POST', as
 
   const { data: client } = await db
     .from('portal_clients')
-    .select('id, email, company, contact, service, access, portal_role, portal_config, pending_approval')
+    .select('id, email, company, company_id, contact, service, access, portal_role, portal_config, pending_approval')
     .eq('id', tokenRow.portal_client_id)
     .single()
 
@@ -59,6 +60,11 @@ export const POST = withErrorHandler('portal-clients/magic-link/verify POST', as
 
   const today = new Date().toISOString().split('T')[0]
   await db.from('portal_clients').update({ last_login: today, access: 'Active' }).eq('id', client.id)
+
+  // Delivery step 4 ("Portal Access"). Safe to call on every login: the step
+  // is only ever advanced once, so this records the first sign-in that
+  // reached this code and silently no-ops thereafter.
+  onPortalFirstLogin(client)
 
   const names = (client.contact ?? '').split(' ')
   logAudit({ userName: client.contact || client.email, action: 'portal_magic_link_login', module: 'portal', type: 'info', metadata: { email: client.email, company: client.company } })

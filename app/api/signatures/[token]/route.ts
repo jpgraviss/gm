@@ -5,6 +5,7 @@ import crypto from 'crypto'
 import { logAudit } from '@/lib/audit'
 import { computeContractDocumentHash } from '@/lib/contract-hash'
 import { fireAutomations } from '@/lib/automations-engine'
+import { onContractFullyExecuted } from '@/lib/delivery-sync'
 
 export const GET = withErrorHandler('signatures/[token] GET', async (
   _req,
@@ -260,6 +261,11 @@ export const PATCH = withErrorHandler('signatures/[token] PATCH', async (
     // genuinely-signed contract. Mirrors the PATCH route's own call.
     if (executedContract) {
       fireAutomations('contract_executed', { contractId: sigReq.contract_id, ...executedContract })
+      // Delivery step 1 ("Contract Signed") used to sit Pending until a
+      // staff member remembered to tick it on the Delivery dashboard — even
+      // though this is the exact moment the app learns the contract is
+      // signed, and the client sees that same step on /client/workflow.
+      onContractFullyExecuted(executedContract)
     }
   } else if (!contractIsTerminal && clientSigned) {
     // Only client signed — countersign needed

@@ -246,6 +246,10 @@ export interface Project {
   color?: string
   description?: string
   companyId?: string | null
+  // null = not tracked for this project (never 0 — see the projects mapper
+  // in app/api/projects/route.ts and the migration that adds these).
+  budgetAmount?: number | null
+  estimatedHours?: number | null
 }
 
 export interface MaintenanceRecord {

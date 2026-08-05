@@ -33,6 +33,11 @@ export const GET = withErrorHandler('time-entries GET', async (req: NextRequest)
   const weekStart = searchParams.get('weekStart')
   const weekEnd   = searchParams.get('weekEnd')
   const member    = searchParams.get('member')
+  // Scoping filter for the project detail page's hours-vs-estimate panel.
+  // Matches on project_id (set from the real project id by the time-tracking
+  // entry form) rather than the denormalized project_name, which is a
+  // company-name snapshot and would mis-attribute after a rename.
+  const projectId = searchParams.get('projectId')
   const pag = parsePagination(req)
   const db = createServiceClient()
   let query = db
@@ -41,6 +46,7 @@ export const GET = withErrorHandler('time-entries GET', async (req: NextRequest)
   if (weekStart) query = query.gte('date', weekStart)
   if (weekEnd)   query = query.lte('date', weekEnd)
   if (member)    query = query.eq('team_member', member)
+  if (projectId) query = query.eq('project_id', projectId)
   const approvalStatus = searchParams.get('approval_status')
   if (approvalStatus) query = query.eq('approval_status', approvalStatus)
   query = applyCursor(query, pag)

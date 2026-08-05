@@ -4,7 +4,7 @@ import { generateRecurringInvoices } from '@/lib/recurring-billing'
 import { createServiceClient } from '@/lib/supabase'
 import { fireAutomations } from '@/lib/automations-engine'
 import { checkSite, recordCheck, computeUptime30d, type MonitoredSiteRow } from '@/lib/uptime'
-import { checkAllRanks, sendDueScheduledReports } from '@/lib/rank-tracker'
+import { checkAllRanks, checkCompetitorRanks, sendDueScheduledReports } from '@/lib/rank-tracker'
 import { publishSocialPost } from '@/lib/social-publish'
 import { processScheduledEmails, rescueStuckSendingEmails } from '@/lib/email-scheduler'
 import { sendMonthlyClientReports, seoReportsDue } from '@/lib/seo-report-sender'
@@ -144,6 +144,9 @@ export const GET = withErrorHandler('cron GET', async (req) => {
   try {
     if (await rankCheckDue()) {
       results.rankTracker = await checkAllRanks()
+      // Competitor ranking needs a live SERP source (GSC only reports
+      // properties you own) — no-ops cleanly when one isn't configured.
+      results.competitorRanks = await checkCompetitorRanks()
     } else {
       results.rankTracker = { skipped: true }
     }

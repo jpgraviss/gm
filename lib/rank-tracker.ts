@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase'
 import { DEFAULT_WORKSPACE_ID } from '@/lib/workspace'
 import { getGSCSearchAnalytics } from '@/lib/google-search-console'
+import { fetchSerpPosition, isSerpConfigured } from '@/lib/serp-provider'
 
 export interface TrackedKeyword {
   id: string
@@ -141,7 +142,21 @@ async function fetchLatestPosition(
   siteUrl: string,
   keyword: string,
   country: string,
+  location?: string | null,
 ): Promise<number | null> {
+  // Prefer a real live-SERP lookup when one is configured — GSC reports its
+  // own average-position metric, needs the client's GSC connected, and
+  // can't see a keyword with zero impressions at all (see
+  // lib/serp-provider.ts). Falls through to GSC when no SERP key is set,
+  // so behavior is unchanged for anyone who hasn't opted into the cost.
+  const serp = await fetchSerpPosition({
+    keyword,
+    domain: siteUrl,
+    country,
+    location: location ?? undefined,
+  })
+  if (serp) return serp.position
+
   const end = new Date()
   const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000)
 
@@ -261,6 +276,7 @@ export async function checkKeyword(tracked: TrackedKeyword): Promise<number | nu
     tracked.siteUrl,
     tracked.keyword,
     tracked.country,
+    tracked.location,
   )
 
   const checkedAt = new Date().toISOString()
@@ -348,6 +364,74 @@ export async function checkAllRanks(batchSize = 25): Promise<{
     .select('id', { count: 'exact', head: true })
 
   return { checked: data?.length ?? 0, updated, failed, total: total ?? data?.length ?? 0 }
+}
+
+/**
+ * Record where each tracked competitor currently ranks for each tracked
+ * keyword. Nothing ever wrote `competitor_rank_snapshots` before this —
+ * the Competitors tab collected domains and then had no data source, so it
+ * was permanently empty. Competitor ranking is structurally impossible via
+ * Google Search Console (it only reports properties you own), which is why
+ * this requires the SERP provider and no-ops without it.
+ */
+export async function checkCompetitorRanks(maxLookups = 50): Promise<{
+  checked: number
+  recorded: number
+  skipped: boolean
+}> {
+  if (!(await isSerpConfigured())) {
+    // Not an error — just nothing we can honestly measure without a SERP
+    // source. The UI already tells staff the Competitors tab needs one.
+    return { checked: 0, recorded: 0, skipped: true }
+  }
+
+  const db = createServiceClient()
+  const [{ data: competitors }, { data: keywords }] = await Promise.all([
+    db.from('rank_tracker_competitors').select('*'),
+    db.from('tracked_keywords').select('*').order('last_checked_at', { ascending: true, nullsFirst: true }),
+  ])
+
+  const checkedAt = new Date().toISOString()
+  let checked = 0
+  let recorded = 0
+
+  outer:
+  for (const competitor of (competitors ?? []) as Record<string, unknown>[]) {
+    for (const kw of (keywords ?? []) as Record<string, unknown>[]) {
+      // Only compare a competitor against keywords for the same client —
+      // ranking a competitor for an unrelated client's keyword is noise.
+      if (competitor.company_id && kw.company_id && competitor.company_id !== kw.company_id) continue
+      // Hard cap: each lookup is a billable SERP call.
+      if (checked >= maxLookups) break outer
+
+      checked += 1
+      const serp = await fetchSerpPosition({
+        keyword: String(kw.keyword),
+        domain: String(competitor.domain ?? ''),
+        country: String(kw.country ?? 'US'),
+        location: (kw.location as string) ?? undefined,
+      })
+      // null means the lookup itself failed — don't record a false
+      // "not ranking" that would show as a real data point on the chart.
+      if (!serp) continue
+
+      const { error } = await db.from('competitor_rank_snapshots').insert({
+        id:                 newId('crs'),
+        workspace_id:       DEFAULT_WORKSPACE_ID,
+        competitor_id:      competitor.id,
+        tracked_keyword_id: kw.id,
+        position:           serp.position,
+        checked_at:         checkedAt,
+      })
+      if (error) {
+        console.error('[rank-tracker] competitor snapshot insert failed', error.message)
+        continue
+      }
+      recorded += 1
+    }
+  }
+
+  return { checked, recorded, skipped: false }
 }
 
 export async function getKeywordHistory(

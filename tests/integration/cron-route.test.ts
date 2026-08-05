@@ -106,8 +106,14 @@ vi.mock('@/lib/email-scheduler', () => ({
   rescueStuckSendingEmails: vi.fn(job('rescueStuckSendingEmails', { rescued: 0 })),
 }))
 
+// NOTE: these factories replace the module wholesale, so every export the
+// route imports must be listed here. Adding a new import to route.ts without
+// adding it here surfaces as that job reporting { error: 'Failed' } (the
+// undefined function throws inside its own try/catch) rather than as a module
+// resolution error — if a job unexpectedly starts failing, check this first.
 vi.mock('@/lib/rank-tracker', () => ({
   checkAllRanks: vi.fn(job('checkAllRanks', { checked: 0 })),
+  checkCompetitorRanks: vi.fn(job('checkCompetitorRanks', { checked: 0 })),
   sendDueScheduledReports: vi.fn(job('sendDueScheduledReports', { sent: 0 })),
 }))
 

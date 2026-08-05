@@ -481,8 +481,41 @@ interface TrainingData {
 
 function SalesTrainingService({ company, userEmail, isPreview }: { company: string; userEmail?: string; isPreview: boolean }) {
   const { toast } = useToast()
+  const router = useRouter()
   const [data, setData] = useState<TrainingData>({ courses: [], enrollments: [], totalCompleted: 0, totalInProgress: 0 })
   const [loading, setLoading] = useState(true)
+  const [enrollingCourseId, setEnrollingCourseId] = useState<string | null>(null)
+
+  // AUDIT #710 — self-enrollment. The server derives the student identity
+  // from the caller's own portal session and verifies the Sales Training
+  // entitlement, so nothing here is trusted; this just kicks it off and
+  // routes into the viewer once a real enrollment exists.
+  async function handleEnroll(courseId: string) {
+    setEnrollingCourseId(courseId)
+    try {
+      const res = await fetch(`/api/courses/${courseId}/enrollments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        toast(err.error || 'Could not start this course', 'error')
+        return
+      }
+      const enrollment = await res.json()
+      setData(prev => ({
+        ...prev,
+        enrollments: [...prev.enrollments, { id: enrollment.id, courseId, progress: enrollment.progress ?? {}, status: enrollment.status ?? 'Active' }],
+        totalInProgress: prev.totalInProgress + 1,
+      }))
+      router.push(`/client/courses/${courseId}?enrollment=${enrollment.id}`)
+    } catch {
+      toast('Network error — could not start this course', 'error')
+    } finally {
+      setEnrollingCourseId(null)
+    }
+  }
 
   useEffect(() => {
     if (!company) { requestAnimationFrame(() => setLoading(false)); return }
@@ -596,29 +629,55 @@ function SalesTrainingService({ company, userEmail, isPreview }: { company: stri
                 // unguarded mutation (course quiz/progress writes, #525).
                 const baseHref = enrollment ? `/client/courses/${c.id}?enrollment=${enrollment.id}` : `/client/courses/${c.id}`
                 const href = isPreview ? `${baseHref}${baseHref.includes('?') ? '&' : '?'}company=${encodeURIComponent(company)}` : baseHref
-                return (
-                  <Link key={c.id} href={href} className="block px-5 py-4 hover:bg-gray-50 transition-colors">
-                    <div className="flex items-start gap-3">
-                      <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#be123c12' }}>
-                        <GraduationCap size={16} style={{ color: '#be123c' }} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800">{c.title}</p>
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{c.description}</p>
-                        {totalModules > 0 && (
-                          <div className="mt-2">
-                            <div className="flex justify-between text-xs mb-1">
-                              <span className="text-gray-500">{completedModules}/{totalModules} modules</span>
-                              <span className="font-semibold" style={{ color: '#be123c' }}>{progress}%</span>
-                            </div>
-                            <div className="w-full bg-gray-100 rounded-full h-1.5">
-                              <div className="h-1.5 rounded-full transition-all" style={{ width: `${progress}%`, background: '#be123c' }} />
-                            </div>
-                          </div>
-                        )}
-                      </div>
+
+                const body = (
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: '#be123c12' }}>
+                      <GraduationCap size={16} style={{ color: '#be123c' }} />
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-800">{c.title}</p>
+                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{c.description}</p>
+                      {enrollment && totalModules > 0 && (
+                        <div className="mt-2">
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="text-gray-500">{completedModules}/{totalModules} modules</span>
+                            <span className="font-semibold" style={{ color: '#be123c' }}>{progress}%</span>
+                          </div>
+                          <div className="w-full bg-gray-100 rounded-full h-1.5">
+                            <div className="h-1.5 rounded-full transition-all" style={{ width: `${progress}%`, background: '#be123c' }} />
+                          </div>
+                        </div>
+                      )}
+                      {/* AUDIT #710 — a client with no enrollment used to get
+                          a link straight into the course viewer, where the
+                          "Mark Complete" button never rendered and quiz
+                          submission threw a raw 400 with no explanation.
+                          Self-enrollment now happens first, explicitly. */}
+                      {!enrollment && (
+                        <button
+                          type="button"
+                          onClick={() => handleEnroll(c.id)}
+                          disabled={enrollingCourseId === c.id || isPreview}
+                          className="mt-2 px-3 py-1.5 rounded-lg text-white text-xs font-semibold disabled:opacity-50 transition-opacity hover:opacity-90"
+                          style={{ background: '#be123c' }}
+                        >
+                          {enrollingCourseId === c.id ? 'Starting…' : isPreview ? 'Start Course (disabled in preview)' : 'Start Course'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+
+                // Only an enrolled client gets a link into the viewer.
+                return enrollment ? (
+                  <Link key={c.id} href={href} className="block px-5 py-4 hover:bg-gray-50 transition-colors">
+                    {body}
                   </Link>
+                ) : (
+                  <div key={c.id} className="px-5 py-4">
+                    {body}
+                  </div>
                 )
               })}
             </div>

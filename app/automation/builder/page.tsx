@@ -3,6 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useToast } from '@/components/ui/Toast'
+import PipelineStageSelect from '@/components/automation/PipelineStageSelect'
 import {
   ArrowLeft, Save, ChevronDown, Plus, MoreHorizontal,
   Zap, Mail, User, Briefcase, Tag,
@@ -351,38 +352,6 @@ function FormTriggerConfig({ formScope, formId, onChange }: {
         {forms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
       </select>
     </FieldLabel>
-  )
-}
-
-// AUDIT #516 — both stage dropdowns below used to hardcode a stage list
-// including 'Negotiation', which doesn't exist in this codebase's real
-// pipeline (lib/pipelines.ts's DEFAULT_PIPELINES) — a deal auto-created or
-// filtered on that stage silently vanished from app/crm/pipeline/page.tsx's
-// board, which groups strictly by `d.stage === s.name`. Same fix #501
-// already applied to the forms editor's deal-stage dropdown: fetch the
-// real, live pipeline stage names instead of a hardcoded list.
-function PipelineStageSelect({ value, onChange, includeAnyOption }: {
-  value: string
-  onChange: (stage: string) => void
-  includeAnyOption?: boolean
-}) {
-  const [stages, setStages] = useState<string[]>([])
-  useEffect(() => {
-    fetch('/api/pipelines')
-      .then(r => r.ok ? r.json() : null)
-      .then((data: Array<{ id: string; stages: Array<{ name: string }> }> | null) => {
-        if (!Array.isArray(data)) return
-        const pipeline = data.find(p => p.id === 'client-acquisition') ?? data[0]
-        setStages(pipeline?.stages?.map(s => s.name) ?? [])
-      })
-      .catch(() => {})
-  }, [])
-
-  return (
-    <select value={value} onChange={e => onChange(e.target.value)} className="cfg-input">
-      {includeAnyOption && <option value="">Any stage</option>}
-      {stages.map(s => <option key={s} value={s}>{s}</option>)}
-    </select>
   )
 }
 

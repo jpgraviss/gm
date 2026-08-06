@@ -3,14 +3,14 @@
 import { useState, useEffect } from 'react'
 import { Bell, X } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
+import { isPushSupported, subscribeToPush } from '@/lib/push-client'
 
 export default function PushNotificationBanner() {
   const { toast } = useToast()
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
-    if (typeof window === 'undefined') return
-    if (!('Notification' in window) || !('serviceWorker' in navigator)) return
+    if (!isPushSupported()) return
     if (Notification.permission !== 'default') return
     const dismissed = localStorage.getItem('gravhub_push_dismissed')
     if (dismissed) return
@@ -21,46 +21,15 @@ export default function PushNotificationBanner() {
   async function enable() {
     setVisible(false)
     try {
-      if ('serviceWorker' in navigator) {
-        await navigator.serviceWorker.register('/sw.js')
-      }
-      const permission = await Notification.requestPermission()
-      if (permission === 'granted') {
-        const registration = await navigator.serviceWorker.ready
-        const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
-        if (!vapidKey) return
-
-        const padding = '='.repeat((4 - (vapidKey.length % 4)) % 4)
-        const base64 = (vapidKey + padding).replace(/-/g, '+').replace(/_/g, '/')
-        const rawData = atob(base64)
-        const outputArray = new Uint8Array(rawData.length)
-        for (let i = 0; i < rawData.length; ++i) {
-          outputArray[i] = rawData.charCodeAt(i)
-        }
-
-        const subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: outputArray,
-        })
-
-        const res = await fetch('/api/push/subscribe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(subscription.toJSON()),
-        })
-        if (!res.ok) {
-          // AUDIT #256 — a failed server call previously left the browser
-          // holding a live Push subscription with no corresponding
-          // push_subscriptions row, silently defeating future
-          // sendPushNotification() calls. Unsubscribe so a retry (rather
-          // than a permanently-stuck half-enabled state) is possible.
-          await subscription.unsubscribe().catch(() => {})
-          toast('Failed to enable push notifications. Please try again.', 'error')
-        }
-      }
+      // AUDIT #747 — this used to reimplement the whole subscribe flow
+      // inline (its own base64 decoder included) because lib/push-notifications.ts
+      // couldn't be imported from a client component. lib/push-client.ts is
+      // that logic, now shared with the Settings toggle so the two can't drift.
+      await subscribeToPush()
+      toast('Push notifications enabled', 'success')
     } catch (err) {
       console.error('[push] registration failed:', err)
-      toast('Failed to enable push notifications. Please try again.', 'error')
+      toast(err instanceof Error ? err.message : 'Failed to enable push notifications. Please try again.', 'error')
     }
   }
 

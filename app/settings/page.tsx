@@ -17,6 +17,7 @@ import {
 import { type EmailSignatureData, DEFAULT_SIGNATURE, generateSignatureHtml } from '@/lib/email-signature'
 import { SERVICES } from '@/lib/services'
 import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
+import PushNotificationToggle from '@/components/settings/PushNotificationToggle'
 import {
   type SystemTemplateName, type SystemEmailTemplate, type TemplateBlock,
   TEMPLATE_LABELS, MERGE_FIELDS, SAMPLE_DATA,
@@ -1684,7 +1685,15 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-sm text-gray-700 font-medium">Enable quiet hours</p>
-                  <p className="text-xs text-gray-400 mt-0.5">During quiet hours, notifications are queued and delivered after</p>
+                  {/* AUDIT #748 — this used to read "notifications are queued
+                      and delivered after". They aren't: shouldSendPushForEvent()
+                      in lib/notification-preferences.ts suppresses the send
+                      outright, and there is no delivery queue anywhere in this
+                      codebase to hold them (Wait actions schedule automation
+                      resumes, not notifications). Promising delivery meant a
+                      user could set quiet hours believing nothing would be
+                      lost. */}
+                  <p className="text-xs text-gray-400 mt-0.5">Push notifications during these hours are skipped, not delivered later</p>
                 </div>
                 <Toggle enabled={quietHours.enabled} onChange={() => setQuietHours(prev => ({ ...prev, enabled: !prev.enabled }))} />
               </div>
@@ -1711,6 +1720,15 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+
+            {/* AUDIT #747 — the only way to enable push was the one-time
+                banner shown while Notification.permission is 'default', and
+                there was no way to turn it off from anywhere in the product,
+                even though unsubscribeFromPush() and DELETE
+                /api/push/subscribe were both already built. Sits directly
+                below the channel matrix, which is where someone looks after
+                picking "push" for a row and finding nothing arrives. */}
+            <PushNotificationToggle />
 
             <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
               <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-1" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Approval Settings</h3>

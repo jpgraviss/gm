@@ -5,6 +5,7 @@ import { fireAutomations } from '@/lib/automations-engine'
 import { validate, validationError } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import { requireRole } from '@/lib/rbac'
+import { normalizeEmail } from '@/lib/email-normalize'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapContact(row: any) {
@@ -73,7 +74,15 @@ export const POST = withErrorHandler('crm/contacts POST', async (req) => {
 
   const db = createServiceClient()
 
-  const emails: string[] = body.emails ?? []
+  // AUDIT #751 — stored lowercase. All fourteen lookups that find a contact
+  // by address use case-SENSITIVE Postgres array containment and carefully
+  // lowercase what they search for, so a contact saved as `John@Acme.com`
+  // would be invisible to every one of them — including the public form's
+  // dedupe check, which would then create a fresh duplicate on each
+  // submission. A DB trigger enforces this too (migration
+  // 20260806130000); doing it here as well keeps the intent visible at the
+  // point of entry rather than only in the schema.
+  const emails: string[] = (body.emails ?? []).map(normalizeEmail).filter(Boolean)
   const fullName = body.fullName ?? `${body.firstName} ${body.lastName}`
 
   if (emails.length > 0) {

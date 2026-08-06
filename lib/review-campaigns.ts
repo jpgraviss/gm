@@ -9,6 +9,7 @@
 import { randomBytes } from 'crypto'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
+import { suppressionSet } from '@/lib/email-normalize'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = any
@@ -164,7 +165,7 @@ export async function resolveCampaignAudience(db: DB, audience: string): Promise
   const { data: suppressedRows } = await db
     .from('sequence_suppression_list')
     .select('email')
-  const suppressedSet = new Set((suppressedRows ?? []).map((s: { email: string }) => s.email))
+  const suppressedSet = suppressionSet(suppressedRows)
 
   const recipients: CampaignRecipient[] = []
   for (const company of matched) {

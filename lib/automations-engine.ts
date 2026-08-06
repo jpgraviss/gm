@@ -4,6 +4,7 @@ import { sendPushNotification } from '@/lib/push-notifications'
 import { wrapBrandedEmail } from '@/lib/email-template'
 import { getSettings } from '@/lib/settings'
 import { shouldSendPushForEvent } from '@/lib/notification-preferences'
+import { normalizeEmail } from '@/lib/email-normalize'
 import { contractMonthlyValue, computeMRR } from '@/lib/metrics'
 import { contractPeriodAmount, isRecurringStructure } from '@/lib/recurring-billing'
 import { sendInvoiceEmail } from '@/lib/invoice-send'
@@ -1155,11 +1156,21 @@ async function executeAction(
       }
       if (!contactEmail) break
 
+      // AUDIT #750 — this compared the contact's address EXACTLY as stored
+      // against a suppression list whose rows are lowercase. Contact emails
+      // are saved verbatim (POST /api/crm/contacts does no normalization, and
+      // the CSV import lowercases only for its dedupe check), so a contact
+      // saved as `John@Acme.com` who had unsubscribed matched nothing here
+      // and was enrolled into a sequence anyway.
+      //
+      // `.single()` also logged a PGRST116 error on the common no-row case;
+      // `.maybeSingle()` is what "0 or 1" means.
+      const normalizedContactEmail = normalizeEmail(contactEmail)
       const { data: suppressed } = await db
         .from('sequence_suppression_list')
         .select('id')
-        .eq('email', contactEmail)
-        .single()
+        .ilike('email', normalizedContactEmail)
+        .maybeSingle()
       if (suppressed) break
 
       // One active sequence at a time — same rule enforced by the manual

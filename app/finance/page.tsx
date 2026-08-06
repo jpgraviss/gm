@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import Link from 'next/link'
-import { computeMRR } from '@/lib/metrics'
+import { computeMRR, computeOneTimeValue, computeOtherValue, computePassThroughValue } from '@/lib/metrics'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   CreditCard, BarChart3, DollarSign, FileBarChart, Plug,
@@ -91,16 +91,37 @@ export default function FinanceHub() {
       .finally(() => setMercuryLoading(false))
   }, [])
 
-  const mrr = computeMRR(contracts)
+  // The four revenue buckets, kept separate on purpose (AUDIT #738/#739).
+  // MRR alone was misleading: it used to absorb payment plans on one-time
+  // jobs and manually-billed Custom contracts, and pass-through (a client's
+  // ad spend, reimbursables) was counted as revenue outright.
+  const mrr         = computeMRR(contracts)
+  const oneTime     = computeOneTimeValue(contracts)
+  const other       = computeOtherValue(contracts)
+  const passThrough = computePassThroughValue(contracts)
 
   const totalBalance = mercuryAccounts.reduce((sum, a) => sum + (a.currentBalance ?? 0), 0)
 
   const KPI_ITEMS = [
     { label: 'Total Collected', value: dashData ? fmt(dashData.totalCollected) : '—', icon: <DollarSign size={16} />, color: '#015035' },
     { label: 'Overdue Invoices', value: dashData ? String(dashData.overdueInvoices) : '—', icon: <CreditCard size={16} />, color: '#ef4444' },
-    { label: 'MRR', value: mrr ? fmt(mrr) : '—', icon: <BarChart3 size={16} />, color: '#3b82f6' },
+    { label: 'MRR', value: mrr ? fmt(mrr) : '—', icon: <BarChart3 size={16} />, color: '#3b82f6',
+      sub: 'Recurring services only' },
     { label: 'Active Clients', value: dashData ? String(dashData.activeClients) : '—', icon: <Users size={16} />, color: '#22c55e' },
   ]
+
+  // Rendered beneath the KPI row rather than beside MRR, so run rate stays
+  // the headline. Each tile is hidden when it's zero — an agency with no
+  // pass-through shouldn't be shown an empty "Pass-Through $0" card
+  // implying a category it doesn't use.
+  const REVENUE_SPLIT = [
+    { label: 'One-Time', value: oneTime, color: '#8b5cf6',
+      hint: 'Builds, onboarding, creative — including payment plans, which end' },
+    { label: 'Other', value: other, color: '#f59e0b',
+      hint: 'Ad-hoc: cancellation fees, hourly work' },
+    { label: 'Pass-Through', value: passThrough, color: '#64748b',
+      hint: 'Billed to clients and remitted onward — NOT agency revenue' },
+  ].filter(x => x.value > 0)
 
   const CARDS = [
     { title: 'Billing & Invoices', href: '/billing', icon: <CreditCard size={20} />, color: '#015035', description: 'Invoices, payments, and billing' },
@@ -124,10 +145,30 @@ export default function FinanceHub() {
               <div>
                 <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">{k.label}</p>
                 <p className="text-lg font-bold text-gray-900">{k.value}</p>
+                {'sub' in k && k.sub && (
+                  <p className="text-[10px] text-gray-400 leading-tight">{k.sub}</p>
+                )}
               </div>
             </div>
           ))}
         </div>
+
+        {REVENUE_SPLIT.length > 0 && (
+          <div className="bg-white rounded-xl border border-gray-200 p-4">
+            <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide mb-3">
+              Contracted value by kind
+            </p>
+            <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${REVENUE_SPLIT.length}, minmax(0, 1fr))` }}>
+              {REVENUE_SPLIT.map(r => (
+                <div key={r.label} title={r.hint} className="border-l-2 pl-3" style={{ borderColor: r.color }}>
+                  <p className="text-[11px] text-gray-500 font-medium">{r.label}</p>
+                  <p className="text-base font-bold text-gray-900">{fmt(r.value)}</p>
+                  <p className="text-[10px] text-gray-400 leading-tight mt-0.5">{r.hint}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Mercury Bank Section */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

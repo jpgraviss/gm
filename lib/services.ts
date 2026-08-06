@@ -394,19 +394,38 @@ export function normalizeServiceType(val?: string | null, fallback?: string | nu
   if (check.includes('sales coaching')) return 'Sales Coaching'
   if (check.includes('enablement support')) return 'Sales Enablement Support'
   if (check.includes('sales enablement') || check.includes('enablement foundation') || check.includes('enablement core') || check.includes('enablement system')) return 'Sales Enablement'
-  if (check.includes('website manage')) return 'Website Management'
+  // Pass-through first: "ad spend" also contains "ad", and misreading spend
+  // as the management fee would count a client's media budget as revenue.
+  if (check.includes('ad spend') || check.includes('media spend') || check.includes('adspend')) return 'Advertising Spend'
+  if (check.includes('reimburs') || check.includes('travel expense') || check.includes('amazon order') || check.includes('expense')) return 'Client Reimbursable Expenses'
+
+  if (check.includes('cancellation') || check.includes('early termination')) return 'Cancellation'
+  if (check.includes('onboarding fee') || check.includes('setup fee')) return 'Onboarding and Setup Fee'
+
+  // 'maintenance' is how this team titles ongoing website work (see the
+  // real deal titles 'Web + Maintenance' / 'Website Maintenance Transfer'),
+  // so it has to beat the generic 'website' → Build rule below.
+  // Matched as two independent tokens rather than an adjacent phrase: the
+  // real titles include 'Web + Maintenance', where the '+' defeats any
+  // 'web maintenance' substring check.
+  if (check.includes('website manage')
+    || (check.includes('maintenance') && (check.includes('web') || check.includes('site')))
+    || (check.includes('hosting') && check.includes('manage'))) return 'Website Management'
   if (check.includes('website') || check.includes('web design') || check.includes('web dev')) return 'Website Build'
+
   // Word-boundary match, not a plain substring check — 'geo' in particular
   // is a common substring of real company/deal names with no relation to
   // SEO ("Georgia Outdoor Advertising" was misclassified as SEO/AEO/GEO
   // before this fix, purely because "Georgia" contains "geo").
-  if (/\b(seo|aeo|geo)\b/.test(check)) return 'SEO / AEO / GEO'
-  if (check.includes('social')) return 'Social Media'
+  if (/\b(seo|aeo|geo)\b/.test(check)) return 'SEO Management'
+  if (check.includes('social')) return 'Social Media Management'
+  if (check.includes('advertis') || check.includes('paid ads') || check.includes('google ads') || check.includes('ppc')) return 'Advertising Management'
   if (check.includes('email')) return 'Email Marketing'
-  if (check.includes('brand')) return 'Branding'
-  if (check.includes('develop')) return 'Development'
-  if (check.includes('market')) return 'Marketing'
-  if (check.includes('content')) return 'Content'
-  if (check.includes('design')) return 'Design'
+  if (check.includes('hourly') || check.includes('consulting')) return 'Hourly Services'
+  // Branding/content/design/creative are all the same deliverable line now.
+  if (check.includes('brand') || check.includes('content') || check.includes('design') || check.includes('creative')) return 'Content and Creative'
+  if (check.includes('develop')) return 'Website Build'
+  // 'marketing' alone is too vague to place — 'General' is the honest answer
+  // rather than inventing a service line for it.
   return 'General'
 }

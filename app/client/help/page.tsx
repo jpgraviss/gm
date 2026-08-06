@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useToast } from '@/components/ui/Toast'
 import { renderMarkdown } from '@/lib/markdown-render'
+import { useClientCompany, previewFetch } from '@/lib/useClientCompany'
 import {
   Search, BookOpen, Rocket, Users, TrendingUp, Megaphone, Settings2,
   CreditCard, Plug, ShieldCheck, ChevronRight, ThumbsUp, ThumbsDown,
@@ -67,6 +68,7 @@ type View =
   | { kind: 'article'; article: Article }
 
 export default function ClientHelpPage() {
+  const { isPreview } = useClientCompany()
   const { toast } = useToast()
   const [articles, setArticles] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
@@ -124,7 +126,9 @@ export default function ClientHelpPage() {
             setFeedbackSaving(true)
             setFeedback(prev => ({ ...prev, [view.article.id]: val }))
             try {
-              await fetch(`/api/knowledge-base/${view.article.id}`, {
+              // AUDIT #763 — raw fetch bypassed the preview guard, so an
+              // admin previewing could file feedback as the client.
+              await previewFetch(isPreview, `/api/knowledge-base/${view.article.id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ feedback: val === 'yes' ? 'helpful' : 'not_helpful' }),

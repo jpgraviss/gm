@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
-import { isStaffCaller } from '@/lib/portal-auth'
+import { isStaffCaller, blockIfPreview } from '@/lib/portal-auth'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -49,6 +49,12 @@ export const POST = withErrorHandler('courses/[id]/quiz/[moduleId]/grade POST', 
   req: NextRequest,
   { params }: { params: Promise<{ id: string; moduleId: string }> },
 ) => {
+  // AUDIT #763 — defence in depth beside previewFetch() on the client.
+  // Placed first, per blockIfPreview's own contract: before any other
+  // auth or validation.
+  const previewBlocked = blockIfPreview(req)
+  if (previewBlocked) return previewBlocked
+
   const email = await getAuthenticatedEmail(req)
   if (!email) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })

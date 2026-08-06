@@ -343,7 +343,11 @@ export default function ClientPortalPage() {
       const fd = new FormData()
       fd.append('file', file)
       fd.append('company', company)
-      const res = await fetch('/api/files', { method: 'POST', body: fd })
+      // AUDIT #763 — the isPreview early-return above already covers this,
+      // but going through previewFetch makes the block structural rather
+      // than dependent on a hand-written guard staying put through a
+      // refactor, and tags the request so /api/files rejects it too.
+      const res = await previewFetch(isPreview, '/api/files', { method: 'POST', body: fd })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         toast(err.error || 'Failed to upload file', 'error')
@@ -1212,7 +1216,8 @@ export default function ClientPortalPage() {
                         const formData = new FormData()
                         formData.append('file', file)
                         formData.append('company', company)
-                        const res = await fetch('/api/files', { method: 'POST', body: formData })
+                        // AUDIT #763 — see uploadTicketAttachment above.
+                        const res = await previewFetch(isPreview, '/api/files', { method: 'POST', body: formData })
                         // AUDIT #283 — this only handled the success
                         // branch; a rejected upload (415 wrong MIME type,
                         // 413 too large) just reverted the "Uploading…"

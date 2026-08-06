@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
+import { blockIfPreview } from '@/lib/portal-auth'
 
 const KB_STATUSES = new Set(['draft', 'published'])
 
@@ -32,6 +33,9 @@ export const GET = withErrorHandler('knowledge-base/[id] GET', async (req, { par
 })
 
 export const PATCH = withErrorHandler('knowledge-base/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
+  // AUDIT #763 — defence in depth beside previewFetch() on the client.
+  const previewBlocked = blockIfPreview(req)
+  if (previewBlocked) return previewBlocked
   const { id } = await params
   const body = await req.json()
   const db = createServiceClient()

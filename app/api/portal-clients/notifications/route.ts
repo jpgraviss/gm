@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
-import { isStaffCaller } from '@/lib/portal-auth'
+import { isStaffCaller, blockIfPreview } from '@/lib/portal-auth'
 import { withErrorHandler } from '@/lib/api-handler'
 
 // A portal client may only read/write their OWN notification feed; staff may
@@ -85,6 +85,9 @@ export const POST = withErrorHandler('portal-clients/notifications POST', async 
 })
 
 export const PATCH = withErrorHandler('portal-clients/notifications PATCH', async (req) => {
+  // AUDIT #763 — defence in depth beside previewFetch() on the client.
+  const previewBlocked = blockIfPreview(req)
+  if (previewBlocked) return previewBlocked
   const { ids } = await req.json()
 
   if (!Array.isArray(ids) || ids.length === 0) {

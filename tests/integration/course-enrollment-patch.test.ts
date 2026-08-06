@@ -74,17 +74,24 @@ function createDb() {
 vi.mock('@/lib/supabase', () => ({ createServiceClient: () => createDb() }))
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }))
 vi.mock('@/lib/admin-auth', () => ({ getAuthenticatedEmail: vi.fn() }))
-vi.mock('@/lib/portal-auth', () => ({ isStaffCaller: vi.fn() }))
+// Only `isStaffCaller` is stubbed. `blockIfPreview` stays real — it's a pure
+// header check, and stubbing it out would make the preview-guard assertion
+// below (AUDIT #763) test nothing at all.
+vi.mock('@/lib/portal-auth', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/lib/portal-auth')>()),
+  isStaffCaller: vi.fn(),
+}))
 vi.mock('@/lib/rbac', () => ({ getAuthUser: vi.fn(), requireRole: vi.fn() }))
 
 import { PATCH } from '@/app/api/courses/[id]/enrollments/[enrollmentId]/route'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { isStaffCaller } from '@/lib/portal-auth'
 
-function callRoute(body: unknown) {
+function callRoute(body: unknown, headers?: Record<string, string>) {
   const req = new NextRequest(new URL('http://localhost/api/courses/crs-1/enrollments/enr-1'), {
     method: 'PATCH',
     body: JSON.stringify(body),
+    headers,
   })
   return PATCH(req, { params: Promise.resolve({ id: 'crs-1', enrollmentId: 'enr-1' }) })
 }
@@ -95,6 +102,20 @@ describe('PATCH /api/courses/[id]/enrollments/[enrollmentId]', () => {
     updateCalls = []
     vi.mocked(getAuthenticatedEmail).mockResolvedValue('jane@student.com')
     vi.mocked(isStaffCaller).mockResolvedValue(false)
+  })
+
+  it('rejects a preview-tagged progress write', async () => {
+    // AUDIT #763 — this is markModuleComplete's target. An admin using
+    // "View as Client" who scrolled through a module would otherwise record
+    // real progress, and a real completion, on that client's training
+    // record. Staff, so every other check on this route would pass.
+    vi.mocked(getAuthenticatedEmail).mockResolvedValue('staff@gravissmarketing.com')
+    vi.mocked(isStaffCaller).mockResolvedValue(true)
+    const res = await callRoute(
+      { progress: { 'mod-video-1': true } },
+      { 'x-client-preview': 'true' },
+    )
+    expect(res.status).toBe(403)
   })
 
   it('never adopts a client-supplied true for a quiz module', async () => {

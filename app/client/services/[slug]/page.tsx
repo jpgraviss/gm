@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
-import { useClientCompany } from '@/lib/useClientCompany'
+import { useClientCompany, previewFetch } from '@/lib/useClientCompany'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
@@ -493,7 +493,9 @@ function SalesTrainingService({ company, userEmail, isPreview }: { company: stri
   async function handleEnroll(courseId: string) {
     setEnrollingCourseId(courseId)
     try {
-      const res = await fetch(`/api/courses/${courseId}/enrollments`, {
+      // AUDIT #763 — raw fetch bypassed the preview guard, so an admin
+      // previewing could enrol the client in a course for real.
+      const res = await previewFetch(isPreview, `/api/courses/${courseId}/enrollments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),

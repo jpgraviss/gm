@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
-import { useClientCompany } from '@/lib/useClientCompany'
+import { useClientCompany, previewFetch } from '@/lib/useClientCompany'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
@@ -172,6 +172,10 @@ function QuizContent({
   onGraded: (enrollment: Enrollment | null) => void
 }) {
   const { toast } = useToast()
+  // AUDIT #763 — this sub-component grades a quiz, which writes a real score
+  // to the client's training record. It needs the preview flag of its own;
+  // the enclosing page reads it separately.
+  const { isPreview } = useClientCompany()
   const [answers, setAnswers] = useState<Record<number, number>>({})
   // Grading happens server-side, which is the only place the real
   // correctIndex values live. `submitted` starts true when the enrollment
@@ -199,7 +203,7 @@ function QuizContent({
   async function handleSubmit() {
     setSubmitting(true)
     try {
-      const res = await fetch(`/api/courses/${courseId}/quiz/${moduleId}/grade`, {
+      const res = await previewFetch(isPreview, `/api/courses/${courseId}/quiz/${moduleId}/grade`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -320,7 +324,7 @@ export default function ClientCourseViewerPage() {
   const enrollmentId = searchParams.get('enrollment')
   const { user } = useAuth()
   const { toast } = useToast()
-  const { company } = useClientCompany()
+  const { company, isPreview } = useClientCompany()
 
   // Entitlement check — same real per-company source and precedence as the
   // Sales Training hub (app/client/services/[slug]/page.tsx's
@@ -404,7 +408,10 @@ export default function ClientCourseViewerPage() {
     try {
       const newProgress = { ...enrollment.progress, [moduleId]: true }
       const allComplete = modules.every(m => newProgress[m.id] === true)
-      const res = await fetch(`/api/courses/${course.id}/enrollments/${enrollment.id}`, {
+      // AUDIT #763 — was a raw fetch(). An admin previewing a client who
+      // scrolled through a module wrote real progress (and a real
+      // completion) onto that client's training record.
+      const res = await previewFetch(isPreview, `/api/courses/${course.id}/enrollments/${enrollment.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -412,14 +419,20 @@ export default function ClientCourseViewerPage() {
           ...(allComplete ? { completed: true } : {}),
         }),
       })
-      if (!res.ok) throw new Error('Failed to save progress')
+      if (!res.ok) {
+        // Surface the route's own reason rather than a fixed string — the
+        // preview block above returns a specific explanation, and a generic
+        // "Failed to save progress" would hide it.
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to save progress')
+      }
       const updated = await res.json()
       setEnrollment(updated)
-    } catch {
-      toast('Failed to save progress', 'error')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Failed to save progress', 'error')
     }
     setSaving(false)
-  }, [enrollment, course, modules, completedModules, toast])
+  }, [enrollment, course, modules, completedModules, toast, isPreview])
 
   if (entitled === null) {
     return <LoadingScreen fullScreen />

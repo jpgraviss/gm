@@ -5,7 +5,7 @@ import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
-import { isStaffCaller } from '@/lib/portal-auth'
+import { isStaffCaller, blockIfPreview } from '@/lib/portal-auth'
 
 // The service-entitlement string a portal client's `services` array must
 // contain to self-enroll — matches lib/services.ts's catalog name and the
@@ -77,6 +77,9 @@ export const POST = withErrorHandler('courses/[id]/enrollments POST', async (
   { params }: { params: Promise<{ id: string }> },
 ) => {
   const { id } = await params
+  // AUDIT #763 — defence in depth beside previewFetch() on the client.
+  const previewBlocked = blockIfPreview(req)
+  if (previewBlocked) return previewBlocked
   const body = await req.json()
   const db = createServiceClient()
 

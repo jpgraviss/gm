@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
-import { isStaffCaller } from '@/lib/portal-auth'
+import { isStaffCaller, blockIfPreview } from '@/lib/portal-auth'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
 
@@ -60,6 +60,12 @@ export const PATCH = withErrorHandler('courses/[id]/enrollments/[enrollmentId] P
   req: NextRequest,
   { params }: { params: Promise<{ id: string; enrollmentId: string }> },
 ) => {
+  // AUDIT #763 — this is what markModuleComplete on the client course viewer
+  // targets, so it's the route that recorded real training progress for a
+  // client an admin was only previewing.
+  const previewBlocked = blockIfPreview(req)
+  if (previewBlocked) return previewBlocked
+
   const email = await getAuthenticatedEmail(req)
   if (!email) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })

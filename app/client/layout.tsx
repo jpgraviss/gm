@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useAuth } from '@/contexts/AuthContext'
-import { useClientCompany } from '@/lib/useClientCompany'
+import { useClientCompany, previewFetch } from '@/lib/useClientCompany'
 import { formatDate } from '@/lib/utils'
 import { Bell, X, LogOut, Eye, ArrowLeft } from 'lucide-react'
 
@@ -77,7 +77,10 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     // no explanation. Revert the optimistic flip whenever the request
     // doesn't actually succeed.
     try {
-      const res = await fetch('/api/portal-clients/notifications', {
+      // AUDIT #763 — was a raw fetch(), so an admin previewing a client who
+      // clicked a notification marked that client's REAL notification read
+      // and they never saw it. previewFetch() blocks it before the network.
+      const res = await previewFetch(isPreview, '/api/portal-clients/notifications', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: [id], read: true }),

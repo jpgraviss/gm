@@ -93,16 +93,23 @@ function createDb() {
 vi.mock('@/lib/supabase', () => ({ createServiceClient: () => createDb() }))
 vi.mock('@/lib/audit', () => ({ logAudit: vi.fn() }))
 vi.mock('@/lib/admin-auth', () => ({ getAuthenticatedEmail: vi.fn() }))
-vi.mock('@/lib/portal-auth', () => ({ isStaffCaller: vi.fn() }))
+// Only `isStaffCaller` is stubbed. `blockIfPreview` stays real — it's a pure
+// header check, and stubbing it out would make the preview-guard assertion
+// below (AUDIT #763) test nothing at all.
+vi.mock('@/lib/portal-auth', async importOriginal => ({
+  ...(await importOriginal<typeof import('@/lib/portal-auth')>()),
+  isStaffCaller: vi.fn(),
+}))
 
 import { POST } from '@/app/api/courses/[id]/quiz/[moduleId]/grade/route'
 import { getAuthenticatedEmail } from '@/lib/admin-auth'
 import { isStaffCaller } from '@/lib/portal-auth'
 
-function callRoute(body: unknown) {
+function callRoute(body: unknown, headers?: Record<string, string>) {
   const req = new NextRequest(new URL('http://localhost/api/courses/crs-1/quiz/mod-quiz-1/grade'), {
     method: 'POST',
     body: JSON.stringify(body),
+    headers,
   })
   return POST(req, { params: Promise.resolve({ id: 'crs-1', moduleId: 'mod-quiz-1' }) })
 }
@@ -119,6 +126,21 @@ describe('POST /api/courses/[id]/quiz/[moduleId]/grade', () => {
     vi.mocked(getAuthenticatedEmail).mockResolvedValue(null)
     const res = await callRoute({ enrollmentId: 'enr-1', answers: {} })
     expect(res.status).toBe(401)
+  })
+
+  it('rejects a preview-tagged submission before it can write a real score', async () => {
+    // AUDIT #763 — the client half (previewFetch) blocks this before the
+    // network; this is the server half. A staff member viewing a client's
+    // account who submitted a quiz would otherwise write a real grade onto
+    // that client's training record, indistinguishable from their own work.
+    // Staff, so it would sail past every other check on this route.
+    vi.mocked(getAuthenticatedEmail).mockResolvedValue('staff@gravissmarketing.com')
+    vi.mocked(isStaffCaller).mockResolvedValue(true)
+    const res = await callRoute(
+      { enrollmentId: 'enr-1', answers: { '0': 1, '1': 1, '2': 1 } },
+      { 'x-client-preview': 'true' },
+    )
+    expect(res.status).toBe(403)
   })
 
   it('rejects a missing answers payload', async () => {

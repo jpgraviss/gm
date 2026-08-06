@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import Link from 'next/link'
 import { computeMRR, computeOneTimeValue, computeOtherValue, computePassThroughValue } from '@/lib/metrics'
+import { RevenueSplit } from '@/components/finance/RevenueSplit'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   CreditCard, BarChart3, DollarSign, FileBarChart, Plug,
@@ -110,18 +111,6 @@ export default function FinanceHub() {
     { label: 'Active Clients', value: dashData ? String(dashData.activeClients) : '—', icon: <Users size={16} />, color: '#22c55e' },
   ]
 
-  // Rendered beneath the KPI row rather than beside MRR, so run rate stays
-  // the headline. Each tile is hidden when it's zero — an agency with no
-  // pass-through shouldn't be shown an empty "Pass-Through $0" card
-  // implying a category it doesn't use.
-  const REVENUE_SPLIT = [
-    { label: 'One-Time', value: oneTime, color: '#8b5cf6',
-      hint: 'Builds, onboarding, creative — including payment plans, which end' },
-    { label: 'Other', value: other, color: '#f59e0b',
-      hint: 'Ad-hoc: cancellation fees, hourly work' },
-    { label: 'Pass-Through', value: passThrough, color: '#64748b',
-      hint: 'Billed to clients and remitted onward — NOT agency revenue' },
-  ].filter(x => x.value > 0)
 
   const CARDS = [
     { title: 'Billing & Invoices', href: '/billing', icon: <CreditCard size={20} />, color: '#015035', description: 'Invoices, payments, and billing' },
@@ -153,22 +142,7 @@ export default function FinanceHub() {
           ))}
         </div>
 
-        {REVENUE_SPLIT.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide mb-3">
-              Contracted value by kind
-            </p>
-            <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${REVENUE_SPLIT.length}, minmax(0, 1fr))` }}>
-              {REVENUE_SPLIT.map(r => (
-                <div key={r.label} title={r.hint} className="border-l-2 pl-3" style={{ borderColor: r.color }}>
-                  <p className="text-[11px] text-gray-500 font-medium">{r.label}</p>
-                  <p className="text-base font-bold text-gray-900">{fmt(r.value)}</p>
-                  <p className="text-[10px] text-gray-400 leading-tight mt-0.5">{r.hint}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <RevenueSplit oneTime={oneTime} other={other} passThrough={passThrough} format={fmt} />
 
         {/* Mercury Bank Section */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

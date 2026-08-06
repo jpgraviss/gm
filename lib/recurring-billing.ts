@@ -1,6 +1,11 @@
 import { createServiceClient } from '@/lib/supabase'
 import { logActivity } from '@/lib/activity-log'
 import type { SupabaseClient } from '@supabase/supabase-js'
+// AUDIT #762 — addMonthsClamped moved to lib/date-math.ts once a second,
+// non-billing consumer needed it. Re-exported so existing importers of this
+// module keep working.
+import { addMonthsClamped } from '@/lib/date-math'
+export { addMonthsClamped }
 
 /**
  * Recurring (retainer) invoice generation.
@@ -94,19 +99,6 @@ export function contractPeriodAmount(value: number, billingStructure: string): n
  * matched and invoices duplicated every tick) and a maintenance schedule that
  * skipped February outright and then drifted off the 31st permanently.
  */
-export function addMonthsClamped(dateStr: string, months: number): string {
-  const d = new Date(dateStr)
-  if (Number.isNaN(d.getTime())) return dateStr
-  const day = d.getUTCDate()
-  // Day 0 of the following month is the last day of the target month.
-  const lastDayOfTarget = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months + 1, 0)).getUTCDate()
-  const result = new Date(Date.UTC(
-    d.getUTCFullYear(),
-    d.getUTCMonth() + months,
-    Math.min(day, lastDayOfTarget),
-  ))
-  return result.toISOString().split('T')[0]
-}
 
 /**
  * The inclusive start date of the billing period `now` falls into, given a

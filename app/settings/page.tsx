@@ -17,6 +17,13 @@ import {
 import { type EmailSignatureData, DEFAULT_SIGNATURE, generateSignatureHtml } from '@/lib/email-signature'
 import { SERVICES } from '@/lib/services'
 import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
+import { daysUntilReauth } from '@/lib/oauth-expiry'
+
+// How far ahead to warn about the 180-day OAuth re-consent window (AUDIT
+// #752). Three weeks: long enough that a reconnect can wait for whoever
+// owns the Google/Meta account to be around, short enough that the notice
+// still reads as actionable rather than background noise.
+const REAUTH_WARNING_DAYS = 21
 import PushNotificationToggle from '@/components/settings/PushNotificationToggle'
 import {
   type SystemTemplateName, type SystemEmailTemplate, type TemplateBlock,
@@ -2774,6 +2781,25 @@ function MarketingIntegrationsSection() {
   const anyGoogleReauth = statuses.some((s) => s.reauthRequired)
   const metaReauth = metaStatus?.reauthRequired ?? false
 
+  // AUDIT #752 — the 180-day re-consent window was enforced silently: the
+  // banner below only appears AFTER a connection has already expired and
+  // sync has stopped. `daysUntilReauth` was written for exactly this warning
+  // and had no callers, so the first anyone learned of an expiry was a
+  // client report that stopped updating. Both status payloads already carry
+  // `connectedAt`, so this needs no server change.
+  const soonestReauthDays = Math.min(
+    ...[
+      ...statuses.filter(s => s.connected).map(s => daysUntilReauth(s.connectedAt)),
+      ...(metaStatus?.connected ? [daysUntilReauth(metaStatus.connectedAt)] : []),
+    ],
+    // Guards Math.min() of an empty list, which is -Infinity and would show
+    // the warning permanently on a workspace with nothing connected.
+    Infinity,
+  )
+  const reauthExpiringSoon = Number.isFinite(soonestReauthDays)
+    && soonestReauthDays > 0
+    && soonestReauthDays <= REAUTH_WARNING_DAYS
+
   async function disconnectGoogleProduct(product: MarketingStatus['product']) {
     if (!confirm(`Disconnect ${GOOGLE_PRODUCT_META[product].name}?`)) return
     try {
@@ -2806,6 +2832,23 @@ function MarketingIntegrationsSection() {
             <p className="text-amber-700 mt-0.5">
               At least one integration has passed the 180-day re-consent window. Click Reconnect
               below to refresh authorization. Data sync is paused until reconnected.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* AUDIT #752 — advance notice. Shown only when nothing has expired
+          yet, so it never competes with the louder banner above. */}
+      {!anyGoogleReauth && !metaReauth && reauthExpiringSoon && (
+        <div className="mb-4 flex items-start gap-3 p-3 rounded-xl border border-blue-200 bg-blue-50">
+          <Clock size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs text-blue-800">
+            <p className="font-semibold">
+              Re-authorization due in {soonestReauthDays} {soonestReauthDays === 1 ? 'day' : 'days'}
+            </p>
+            <p className="text-blue-700 mt-0.5">
+              An integration is approaching the 180-day re-consent window. Reconnect it now to
+              avoid an interruption — once the window passes, sync stops until someone reconnects.
             </p>
           </div>
         </div>

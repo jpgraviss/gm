@@ -5,6 +5,8 @@ import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
 import { renderMarkdown } from '@/lib/markdown-render'
+import { openArticleCountingView } from '@/lib/kb-views'
+import { replaceById } from '@/lib/optimistic'
 import {
   Search, BookOpen, Rocket, Users, TrendingUp, Megaphone, Settings2,
   CreditCard, Plug, ShieldCheck, Plus, X, Eye, EyeOff, Trash2, Tag,
@@ -343,14 +345,15 @@ export default function KnowledgeBasePage() {
   // an article never breaks over a transient network error.
   async function openArticle(article: Article) {
     setViewArticle(article)
-    try {
-      const res = await fetch(`/api/knowledge-base/${article.id}`)
-      if (!res.ok) return
-      const fresh = await res.json()
-      const updated: Article = { ...article, views: fresh.views ?? article.views }
-      setViewArticle(updated)
-      setArticles(prev => prev.map(a => a.id === updated.id ? updated : a))
-    } catch { /* keep the locally-known article */ }
+    // AUDIT #757 — the fetch-and-merge moved to lib/kb-views.ts so a test
+    // can assert the request actually happens. That request IS the feature:
+    // it is what fires #276's increment_kb_article_views RPC, and #522 was
+    // simply that nothing called it. Every failure path returns the article
+    // unchanged, so a counter update can never stop someone reading a doc.
+    const updated = await openArticleCountingView(article)
+    if (updated === article) return
+    setViewArticle(updated)
+    setArticles(prev => replaceById(prev, updated.id, updated))
   }
 
   async function handleSave(data: { title: string; body: string; category: string; tags: string[]; status: string; author?: string | null }, id?: string) {

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { ALL_SERVICE_VALUES } from '@/lib/services'
 import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, PROPOSAL_STATUSES } from '@/lib/validation'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
@@ -73,7 +74,14 @@ export const POST = withErrorHandler('proposals POST', async (req) => {
     company:     { required: true, type: 'string', maxLength: 200 },
     status:      { type: 'string', enum: [...PROPOSAL_STATUSES] },
     value:       { type: 'number', min: 0, max: 100_000_000 },
-    serviceType: { type: 'string', maxLength: 100 },
+    // Validated against the catalog (canonical names + aliases + legacy
+    // values), not free text. `deals.service_type` previously accepted any
+    // string up to 100 chars, which is how deal TITLES ended up in the
+    // service column — 'Scoreboard Designer', '2026 Website Redesign +
+    // Hosting' and ~25 others, cleaned up in migration 20260805180000.
+    // Importers still go through normalizeServiceType() instead, since they
+    // genuinely receive free text and must map rather than reject.
+    serviceType: { type: 'string', enum: [...ALL_SERVICE_VALUES] },
     assignedRep: { type: 'string', maxLength: 200 },
     items:       { type: 'array' },
   })

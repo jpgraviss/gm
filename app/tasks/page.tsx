@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useAuth } from '@/contexts/AuthContext'
 import { TASK_DEPARTMENTS, type TaskDepartment } from '@/lib/task-department'
 import { SERVICE_NAMES } from '@/lib/services'
+import { replaceById, dropById } from '@/lib/optimistic'
 
 const categoryColors: Record<AppTaskCategory, string> = {
   Deal:     'bg-blue-100 text-blue-700',
@@ -800,11 +801,11 @@ export default function TasksPage() {
       // existing id instead of 500ing and getting silently filtered out
       // of local state by the "not found" recovery path.
       const saved = await res.json()
-      setTasks(prev => prev.map(t => t.id === task.id ? (saved as AppTask) : t))
+      setTasks(prev => replaceById(prev, task.id, saved as AppTask))
       setSelectedTask(prev => prev?.id === task.id ? (saved as AppTask) : prev)
       toast('Task created', 'success')
     }).catch(() => {
-      setTasks(prev => prev.filter(t => t.id !== task.id))
+      setTasks(prev => dropById(prev, task.id))
       toast('Failed to save task', 'error')
     })
   }

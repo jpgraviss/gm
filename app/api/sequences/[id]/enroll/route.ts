@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { validate, validationError, EMAIL_PATTERN } from '@/lib/validation'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { suppressionSet } from '@/lib/email-normalize'
 
 export const POST = withErrorHandler('sequences/[id]/enroll POST', async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const denied = await requireRole(req, 'Team Member')
@@ -53,7 +54,7 @@ export const POST = withErrorHandler('sequences/[id]/enroll POST', async (req: N
     .from('sequence_suppression_list')
     .select('email')
     .in('email', normalizedEmails)
-  const suppressedEmails = new Set((suppressed ?? []).map((r: { email: string }) => r.email))
+  const suppressedEmails = suppressionSet(suppressed)
 
   // Check one-at-a-time: skip contacts already active in another sequence
   const { data: activeElsewhere } = await db

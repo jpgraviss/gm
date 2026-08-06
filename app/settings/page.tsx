@@ -17,6 +17,14 @@ import {
 import { type EmailSignatureData, DEFAULT_SIGNATURE, generateSignatureHtml } from '@/lib/email-signature'
 import { SERVICES } from '@/lib/services'
 import { DELIVERY_STEP_NAMES } from '@/lib/delivery-steps'
+import { daysUntilReauth } from '@/lib/oauth-expiry'
+
+// How far ahead to warn about the 180-day OAuth re-consent window (AUDIT
+// #752). Three weeks: long enough that a reconnect can wait for whoever
+// owns the Google/Meta account to be around, short enough that the notice
+// still reads as actionable rather than background noise.
+const REAUTH_WARNING_DAYS = 21
+import PushNotificationToggle from '@/components/settings/PushNotificationToggle'
 import {
   type SystemTemplateName, type SystemEmailTemplate, type TemplateBlock,
   TEMPLATE_LABELS, MERGE_FIELDS, SAMPLE_DATA,
@@ -1684,7 +1692,15 @@ export default function SettingsPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-sm text-gray-700 font-medium">Enable quiet hours</p>
-                  <p className="text-xs text-gray-400 mt-0.5">During quiet hours, notifications are queued and delivered after</p>
+                  {/* AUDIT #748 — this used to read "notifications are queued
+                      and delivered after". They aren't: shouldSendPushForEvent()
+                      in lib/notification-preferences.ts suppresses the send
+                      outright, and there is no delivery queue anywhere in this
+                      codebase to hold them (Wait actions schedule automation
+                      resumes, not notifications). Promising delivery meant a
+                      user could set quiet hours believing nothing would be
+                      lost. */}
+                  <p className="text-xs text-gray-400 mt-0.5">Push notifications during these hours are skipped, not delivered later</p>
                 </div>
                 <Toggle enabled={quietHours.enabled} onChange={() => setQuietHours(prev => ({ ...prev, enabled: !prev.enabled }))} />
               </div>
@@ -1711,6 +1727,15 @@ export default function SettingsPage() {
                 </div>
               )}
             </div>
+
+            {/* AUDIT #747 — the only way to enable push was the one-time
+                banner shown while Notification.permission is 'default', and
+                there was no way to turn it off from anywhere in the product,
+                even though unsubscribeFromPush() and DELETE
+                /api/push/subscribe were both already built. Sits directly
+                below the channel matrix, which is where someone looks after
+                picking "push" for a row and finding nothing arrives. */}
+            <PushNotificationToggle />
 
             <div className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6">
               <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide mb-1" style={{ fontFamily: 'var(--font-syncopate), sans-serif' }}>Approval Settings</h3>
@@ -2756,6 +2781,25 @@ function MarketingIntegrationsSection() {
   const anyGoogleReauth = statuses.some((s) => s.reauthRequired)
   const metaReauth = metaStatus?.reauthRequired ?? false
 
+  // AUDIT #752 — the 180-day re-consent window was enforced silently: the
+  // banner below only appears AFTER a connection has already expired and
+  // sync has stopped. `daysUntilReauth` was written for exactly this warning
+  // and had no callers, so the first anyone learned of an expiry was a
+  // client report that stopped updating. Both status payloads already carry
+  // `connectedAt`, so this needs no server change.
+  const soonestReauthDays = Math.min(
+    ...[
+      ...statuses.filter(s => s.connected).map(s => daysUntilReauth(s.connectedAt)),
+      ...(metaStatus?.connected ? [daysUntilReauth(metaStatus.connectedAt)] : []),
+    ],
+    // Guards Math.min() of an empty list, which is -Infinity and would show
+    // the warning permanently on a workspace with nothing connected.
+    Infinity,
+  )
+  const reauthExpiringSoon = Number.isFinite(soonestReauthDays)
+    && soonestReauthDays > 0
+    && soonestReauthDays <= REAUTH_WARNING_DAYS
+
   async function disconnectGoogleProduct(product: MarketingStatus['product']) {
     if (!confirm(`Disconnect ${GOOGLE_PRODUCT_META[product].name}?`)) return
     try {
@@ -2788,6 +2832,23 @@ function MarketingIntegrationsSection() {
             <p className="text-amber-700 mt-0.5">
               At least one integration has passed the 180-day re-consent window. Click Reconnect
               below to refresh authorization. Data sync is paused until reconnected.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* AUDIT #752 — advance notice. Shown only when nothing has expired
+          yet, so it never competes with the louder banner above. */}
+      {!anyGoogleReauth && !metaReauth && reauthExpiringSoon && (
+        <div className="mb-4 flex items-start gap-3 p-3 rounded-xl border border-blue-200 bg-blue-50">
+          <Clock size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 text-xs text-blue-800">
+            <p className="font-semibold">
+              Re-authorization due in {soonestReauthDays} {soonestReauthDays === 1 ? 'day' : 'days'}
+            </p>
+            <p className="text-blue-700 mt-0.5">
+              An integration is approaching the 180-day re-consent window. Reconnect it now to
+              avoid an interruption — once the window passes, sync stops until someone reconnects.
             </p>
           </div>
         </div>

@@ -5,6 +5,7 @@
 
 import { sendEmail } from '@/lib/email'
 import { buildSequenceUnsubscribeUrl } from '@/lib/sequence-unsubscribe'
+import { suppressionSet } from '@/lib/email-normalize'
 
 export interface AudienceFilter {
   lifecycleStage?: string
@@ -238,7 +239,7 @@ export async function sendBroadcastNow(db: any, broadcast: any): Promise<{ sent:
     .from('sequence_suppression_list')
     .select('email')
     .in('email', allEmails)
-  const suppressedSet = new Set((suppressedRows ?? []).map((s: { email: string }) => s.email))
+  const suppressedSet = suppressionSet(suppressedRows)
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'
   let sent = 0

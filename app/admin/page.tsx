@@ -575,9 +575,22 @@ export default function AdminPage() {
   // Fetch KPI metrics from real API endpoints
   useEffect(() => {
     // Active contracts + MRR
-    fetch('/api/contracts')
-      .then(r => r.ok ? r.json() : [])
-      .then((contracts: { status?: string; billingStructure?: string; value?: number }[]) => {
+    //
+    // `serviceType` is REQUIRED here even though `MrrContract` marks it
+    // optional. computeMRR needs it to tell a real retainer from a payment
+    // plan on a one-time job (AUDIT #738); without it the classification
+    // silently falls back to billing structure alone and this page reports a
+    // HIGHER MRR than Finance, Reports and Contracts — which all pass full
+    // `Contract` objects. TypeScript can't catch the omission precisely
+    // because the field is optional by design (for legacy callers), so the
+    // mismatch is only visible by comparing two pages side by side.
+    //
+    // fetchAllPages, not a bare fetch: /api/contracts is cursor-paginated at
+    // 500/page, and taking only the first page would undercount MRR once
+    // this org passes that — the same truncation class already fixed on the
+    // Finance page and in AUDIT #206/#103.
+    fetchAllPages<{ status?: string; billingStructure?: string; value?: number; serviceType?: string | null }>('/api/contracts')
+      .then(contracts => {
         if (!Array.isArray(contracts)) return
         const active = contracts.filter(c => c.status === 'Fully Executed' || c.status === 'Active').length
         const mrr = computeMRR(contracts)
@@ -586,10 +599,17 @@ export default function AdminPage() {
       .catch(() => {})
 
     // Pipeline value
-    fetch('/api/deals')
-      .then(r => r.ok ? r.json() : [])
-      .then((deals: { stage?: string; value?: number }[]) => {
-        if (!Array.isArray(deals)) return
+    //
+    // AUDIT #754 — these two were left on a bare `fetch` when the contracts
+    // call above was moved to fetchAllPages for the same reason (#743).
+    // Fixing the one call site that was named and leaving its siblings in
+    // the same useEffect is the exact pattern this file keeps getting caught
+    // by. /api/deals and /api/projects are both cursor-paginated at 500 a
+    // page, and both figures below are totals over the WHOLE collection —
+    // so past 500 rows each silently reports a number that is too low, with
+    // no error and nothing to notice.
+    fetchAllPages<{ stage?: string; value?: number }>('/api/deals')
+      .then(deals => {
         const pipeline = deals
           .filter(d => d.stage !== 'Closed Won' && d.stage !== 'Closed Lost')
           .reduce((sum, d) => sum + (d.value || 0), 0)
@@ -598,10 +618,8 @@ export default function AdminPage() {
       .catch(() => {})
 
     // Open projects
-    fetch('/api/projects')
-      .then(r => r.ok ? r.json() : [])
-      .then((projects: { status?: string }[]) => {
-        if (!Array.isArray(projects)) return
+    fetchAllPages<{ status?: string }>('/api/projects')
+      .then(projects => {
         const open = projects.filter(p => p.status === 'In Progress' || p.status === 'Awaiting Client').length
         setMetrics(prev => ({ ...prev, openProjects: open }))
       })

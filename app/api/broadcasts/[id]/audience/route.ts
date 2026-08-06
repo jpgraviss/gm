@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { applyAudienceFilter, resolveEngagementFilters } from '@/lib/broadcasts'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { suppressionSet } from '@/lib/email-normalize'
 
 /**
  * Preview audience — returns count + sample emails for the current
@@ -76,7 +77,7 @@ export const GET = withErrorHandler('broadcasts/[id]/audience GET', async (req: 
     .select('email')
     .in('email', emails.map(e => e.toLowerCase()))
 
-  const suppressedSet = new Set((suppressed ?? []).map((s: { email: string }) => s.email))
+  const suppressedSet = suppressionSet(suppressed)
 
   const totalCount = count ?? 0
   const recentExcluded = excludeRecentContactIds ? excludeRecentContactIds.size : 0

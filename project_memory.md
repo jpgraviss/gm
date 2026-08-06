@@ -91,7 +91,11 @@ here is generated output.
 
 ## Pending user action
 
-All five 2026-08-05 migrations are **applied and verified live** (see AUDIT
+All 2026-08-05 migrations are **applied and verified live** — the original
+five plus both service-normalization passes (`20260805180000`,
+`20260805190000`), the latter confirmed by reconciling row counts rather
+than merely checking the old values were absent (absence alone can't tell
+"migrated" from "deleted"). The original five were (see AUDIT
 #507/#439/#699/#722/#724/#725): project budget+hours, SerpApi settings,
 booking-type owner, rate-limit counters, and the #507 RLS patch that closed
 the last four policies bypassing the 2FA gate. Verified by querying the

@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import Header from '@/components/layout/Header'
 import Link from 'next/link'
-import { computeMRR } from '@/lib/metrics'
+import { computeMRR, computeOneTimeValue, computeOtherValue, computePassThroughValue } from '@/lib/metrics'
+import { RevenueSplit } from '@/components/finance/RevenueSplit'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
 import {
   CreditCard, BarChart3, DollarSign, FileBarChart, Plug,
@@ -91,16 +92,25 @@ export default function FinanceHub() {
       .finally(() => setMercuryLoading(false))
   }, [])
 
-  const mrr = computeMRR(contracts)
+  // The four revenue buckets, kept separate on purpose (AUDIT #738/#739).
+  // MRR alone was misleading: it used to absorb payment plans on one-time
+  // jobs and manually-billed Custom contracts, and pass-through (a client's
+  // ad spend, reimbursables) was counted as revenue outright.
+  const mrr         = computeMRR(contracts)
+  const oneTime     = computeOneTimeValue(contracts)
+  const other       = computeOtherValue(contracts)
+  const passThrough = computePassThroughValue(contracts)
 
   const totalBalance = mercuryAccounts.reduce((sum, a) => sum + (a.currentBalance ?? 0), 0)
 
   const KPI_ITEMS = [
     { label: 'Total Collected', value: dashData ? fmt(dashData.totalCollected) : '—', icon: <DollarSign size={16} />, color: '#015035' },
     { label: 'Overdue Invoices', value: dashData ? String(dashData.overdueInvoices) : '—', icon: <CreditCard size={16} />, color: '#ef4444' },
-    { label: 'MRR', value: mrr ? fmt(mrr) : '—', icon: <BarChart3 size={16} />, color: '#3b82f6' },
+    { label: 'MRR', value: mrr ? fmt(mrr) : '—', icon: <BarChart3 size={16} />, color: '#3b82f6',
+      sub: 'Recurring services only' },
     { label: 'Active Clients', value: dashData ? String(dashData.activeClients) : '—', icon: <Users size={16} />, color: '#22c55e' },
   ]
+
 
   const CARDS = [
     { title: 'Billing & Invoices', href: '/billing', icon: <CreditCard size={20} />, color: '#015035', description: 'Invoices, payments, and billing' },
@@ -124,10 +134,15 @@ export default function FinanceHub() {
               <div>
                 <p className="text-[11px] text-gray-500 font-medium uppercase tracking-wide">{k.label}</p>
                 <p className="text-lg font-bold text-gray-900">{k.value}</p>
+                {'sub' in k && k.sub && (
+                  <p className="text-[10px] text-gray-400 leading-tight">{k.sub}</p>
+                )}
               </div>
             </div>
           ))}
         </div>
+
+        <RevenueSplit oneTime={oneTime} other={other} passThrough={passThrough} format={fmt} />
 
         {/* Mercury Bank Section */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">

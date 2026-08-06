@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Header from '@/components/layout/Header'
 import { useToast } from '@/components/ui/Toast'
+import { mutateJson } from '@/lib/api-mutate'
 import {
   Bot, Plus, X, Copy, Check, Trash2, Pencil, Globe,
   MessageSquare, ToggleLeft, ToggleRight, Code, ExternalLink,
@@ -214,20 +215,20 @@ export default function ChatbotsPage() {
   }
 
   async function toggleActive(bot: Chatbot) {
+    // AUDIT #521 — a failed toggle (e.g. blocked by requireAdmin) used to
+    // fail silently: fetchBots() would resync to the real (unchanged)
+    // state with no feedback telling the user why their click did nothing.
+    // AUDIT #759 — the first fix toasted a fixed string, which still didn't
+    // say why. mutateJson surfaces the route's own message, so being
+    // blocked by requireAdmin now reads as exactly that.
     try {
-      const res = await fetch(`/api/chatbots/${bot.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ active: !bot.active }),
-      })
-      // AUDIT #521 — a failed toggle (e.g. blocked by requireAdmin) used to
-      // fail silently: fetchBots() would resync to the real (unchanged)
-      // state with no feedback telling the user why their click did nothing.
-      if (!res.ok) toast('Failed to update chatbot status', 'error')
-      fetchBots()
-    } catch {
-      toast('Failed to update chatbot status', 'error')
+      await mutateJson(`/api/chatbots/${bot.id}`, 'PATCH', { active: !bot.active })
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to update chatbot status', 'error')
     }
+    // Resync either way: on success to pick up server-side changes, on
+    // failure to snap the row back to the state that actually persisted.
+    fetchBots()
   }
 
   /* ── Embed helpers ─────────────────────────────────────────── */

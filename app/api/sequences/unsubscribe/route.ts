@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { verifySequenceUnsubscribeToken } from '@/lib/sequence-unsubscribe'
+import { normalizeEmail } from '@/lib/email-normalize'
 
 function invalidLinkPage(): NextResponse {
   const html = `<!DOCTYPE html>
@@ -107,7 +108,14 @@ export const POST = withErrorHandler('sequences/unsubscribe POST', async (req: N
     return NextResponse.json({ error: 'Invalid or expired link' }, { status: 400 })
   }
 
-  const email = payload.email
+  // AUDIT #750 — this took the token's email as-is. It happens to be
+  // lowercase today because buildSequenceUnsubscribeUrl() normalizes before
+  // signing, but nothing here stated that, and every reader of
+  // sequence_suppression_list assumes lowercase. Normalizing at the write
+  // means a token minted by any future caller can't write a row that the
+  // suppression checks then fail to match — i.e. an unsubscribe that
+  // silently doesn't take.
+  const email = normalizeEmail(payload.email)
   const db = createServiceClient()
 
   // Add to global suppression list (unique on email)

@@ -17,6 +17,7 @@ import FileUpload from '@/components/ui/FileUpload'
 import CompanySelect from '@/components/ui/CompanySelect'
 import ConfirmModal from '@/components/ui/ConfirmModal'
 import LoadingScreen from '@/components/ui/LoadingScreen'
+import { replaceById, dropById } from '@/lib/optimistic'
 import {
   ArrowLeft, Plus, X, CheckCircle2, Clock, Circle, LayoutList, Columns3,
   MoreHorizontal, Pencil, Trash2, ChevronDown, ChevronRight, Calendar,
@@ -925,9 +926,9 @@ export default function ProjectDetailPage() {
       // existing id instead of 404ing and getting silently filtered out of
       // local state by the "not found" recovery path.
       const saved = await res.json()
-      setTasks(prev => prev.map(t => t.id === newTask.id ? (saved as AppTask) : t))
+      setTasks(prev => replaceById(prev, newTask.id, saved as AppTask))
     }).catch(() => {
-      setTasks(prev => prev.filter(t => t.id !== newTask.id))
+      setTasks(prev => dropById(prev, newTask.id))
       toast('Failed to create task', 'error')
     })
   }, [id, tasks.length, toast])

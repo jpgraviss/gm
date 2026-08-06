@@ -201,6 +201,23 @@ export default function BookingManagementPage() {
                       {!bt.active && (
                         <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-400 font-medium">Inactive</span>
                       )}
+                      {/* AUDIT #761 — an unassigned type looked completely
+                          normal here. It still accepts public bookings; they
+                          just never reach anyone's calendar, because
+                          calendar sync deliberately skips types with no
+                          owner rather than guessing one (#699). Without a
+                          badge the only way to find them was to open every
+                          type in turn. Amber rather than red: the booking
+                          itself is recorded, so this needs attention, not
+                          alarm. */}
+                      {bt.active && !bt.owner_calendar_slug && (
+                        <span
+                          className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium"
+                          title="Bookings for this type are saved but won't sync to anyone's calendar until you set a Calendar Owner."
+                        >
+                          No calendar owner
+                        </span>
+                      )}
                     </div>
                     {bt.description && (
                       <p className="text-xs text-gray-500 mb-2">{bt.description}</p>
@@ -357,10 +374,15 @@ export default function BookingManagementPage() {
                       <option key={c.slug} value={c.slug}>{c.title}{c.active ? '' : ' (inactive)'}</option>
                     ))}
                   </select>
+                  {/* AUDIT #760 — these were written with `&apos;`, which is
+                      only decoded for text sitting directly in JSX. Inside a
+                      JS string literal in an expression container React
+                      renders it verbatim, so the hint literally read
+                      "this person&apos;s Google Calendar". */}
                   <p className="text-[11px] text-gray-400 mt-1.5">
                     {editing.owner_calendar_slug
-                      ? 'Appointments booked through this type sync to this person&apos;s Google Calendar.'
-                      : 'Assign an owner so booked appointments reach the right person&apos;s calendar.'}
+                      ? 'Appointments booked through this type sync to this person’s Google Calendar.'
+                      : 'Assign an owner so booked appointments reach the right person’s calendar.'}
                   </p>
                 </div>
 

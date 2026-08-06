@@ -12,6 +12,7 @@ import {
   Phone, Linkedin, BarChart3, Sparkles, Loader2, AlertTriangle,
 } from 'lucide-react'
 import type { SequenceStatus, SequenceStepType, SequenceStep, EmailSequence } from '@/lib/types'
+import { mutateJson } from '@/lib/api-mutate'
 
 type StepType = SequenceStepType
 
@@ -415,25 +416,23 @@ export default function SequencesPage() {
   }, [sortBy])
 
   async function addSequence(newSeq: EmailSequence) {
-    const res = await fetch('/api/sequences', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newSeq),
-    })
     // AUDIT #517 — this used to close the modal unconditionally with no
     // res.ok check, so a failed POST (role check, validation, DB error)
     // left the modal closing silently with zero toast and no sequence
     // created, asymmetric with updateSequence/deleteSequence on this same
-    // page (#389).
-    if (!res.ok) {
-      toast('Failed to create sequence', 'error')
+    // page (#389). AUDIT #759 — now via mutateJson, which cannot return a
+    // value unless the write landed, and which surfaces the route's own
+    // reason ("Only admins can...", a validation detail) instead of a flat
+    // "Failed to create sequence" that leaves the user guessing.
+    try {
+      const saved = await mutateJson<EmailSequence>('/api/sequences', 'POST', newSeq)
+      setSequences(prev => [saved, ...prev])
       setCreatingSeq(false)
-      return
+      router.push(`/crm/sequences/${saved.id}`)
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Failed to create sequence', 'error')
+      setCreatingSeq(false)
     }
-    const saved = await res.json()
-    setSequences(prev => [saved, ...prev])
-    setCreatingSeq(false)
-    router.push(`/crm/sequences/${saved.id}`)
   }
 
   // Re-resolves a single sequence's real server state via the list route

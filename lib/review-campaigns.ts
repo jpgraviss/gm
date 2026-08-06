@@ -10,6 +10,7 @@ import { randomBytes } from 'crypto'
 import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { suppressionSet } from '@/lib/email-normalize'
+import { addMonthsClamped, todayISO } from '@/lib/date-math'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = any
@@ -104,13 +105,15 @@ export async function resolveCampaignAudience(db: DB, audience: string): Promise
   let companyQuery = db.from('crm_companies').select('id, name, created_date').eq('status', 'Active Client')
 
   if (audience === 'Clients 12+ Months') {
-    const cutoff = new Date()
-    cutoff.setMonth(cutoff.getMonth() - 12)
-    companyQuery = companyQuery.lte('created_date', cutoff.toISOString().split('T')[0])
+    // AUDIT #762 — was `cutoff.setMonth(getMonth() - 12)`, which overflows
+    // rather than clamping: on the 31st it lands 2-3 days LATE, so companies
+    // only ~11 months and 28 days old were treated as 12+ month clients.
+    companyQuery = companyQuery.lte('created_date', addMonthsClamped(todayISO(), -12))
   } else if (audience === 'New Clients (< 3 Months)') {
-    const cutoff = new Date()
-    cutoff.setMonth(cutoff.getMonth() - 3)
-    companyQuery = companyQuery.gte('created_date', cutoff.toISOString().split('T')[0])
+    // AUDIT #762 — same overflow the other way round: a late cutoff EXCLUDED
+    // genuinely-new clients created in the days `setMonth` skipped over, from
+    // a campaign they qualified for.
+    companyQuery = companyQuery.gte('created_date', addMonthsClamped(todayISO(), -3))
   }
 
   const { data: companies, error } = await companyQuery

@@ -14,9 +14,15 @@ export const GET = withErrorHandler('knowledge-base/[id] GET', async (req, { par
   const db = createServiceClient()
 
   const { data, error } = await db.from('knowledge_articles').select('*').eq('id', id).single()
-  if (error) {
+  if (error || !data) {
+    // AUDIT #753 — this returned `error.message` verbatim, which for the
+    // ordinary not-found case is PostgREST's "JSON object requested,
+    // multiple (or no) rows returned" — internal wording shown straight to
+    // the caller. Every sibling `[id]` route in this app returns a plain
+    // "<Thing> not found"; this is the one that didn't. The real error is
+    // still logged. `!data` is also now checked, matching the siblings.
     console.error('[knowledge-base/:id GET]', error)
-    return NextResponse.json({ error: error.message }, { status: 404 })
+    return NextResponse.json({ error: 'Article not found' }, { status: 404 })
   }
 
   // AUDIT #276 — atomic RPC instead of a read-then-write increment.

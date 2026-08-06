@@ -575,9 +575,22 @@ export default function AdminPage() {
   // Fetch KPI metrics from real API endpoints
   useEffect(() => {
     // Active contracts + MRR
-    fetch('/api/contracts')
-      .then(r => r.ok ? r.json() : [])
-      .then((contracts: { status?: string; billingStructure?: string; value?: number }[]) => {
+    //
+    // `serviceType` is REQUIRED here even though `MrrContract` marks it
+    // optional. computeMRR needs it to tell a real retainer from a payment
+    // plan on a one-time job (AUDIT #738); without it the classification
+    // silently falls back to billing structure alone and this page reports a
+    // HIGHER MRR than Finance, Reports and Contracts — which all pass full
+    // `Contract` objects. TypeScript can't catch the omission precisely
+    // because the field is optional by design (for legacy callers), so the
+    // mismatch is only visible by comparing two pages side by side.
+    //
+    // fetchAllPages, not a bare fetch: /api/contracts is cursor-paginated at
+    // 500/page, and taking only the first page would undercount MRR once
+    // this org passes that — the same truncation class already fixed on the
+    // Finance page and in AUDIT #206/#103.
+    fetchAllPages<{ status?: string; billingStructure?: string; value?: number; serviceType?: string | null }>('/api/contracts')
+      .then(contracts => {
         if (!Array.isArray(contracts)) return
         const active = contracts.filter(c => c.status === 'Fully Executed' || c.status === 'Active').length
         const mrr = computeMRR(contracts)

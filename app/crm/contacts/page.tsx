@@ -404,6 +404,10 @@ function EditContactPanel({
 function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts, projects, crmActivities }: { contact: CRMContact; onClose: () => void; onEdit?: () => void; crmCompanies: CRMCompany[]; deals: Deal[]; contracts: Contract[]; projects: Project[]; crmActivities: CRMActivity[] }) {
   const { toast } = useToast()
   const { user } = useAuth()
+  // Who to attribute persisted notes/tasks to. 'You' is only a last-resort
+  // render fallback for a missing session — it must never be what gets
+  // written, since it's stored verbatim and read by everyone else (#519).
+  const authorName = user?.name || user?.email || 'You'
   const [tab, setTab] = useState<'activity' | 'associations' | 'about'>('activity')
   const [taskDone, setTaskDone] = useState<Set<string>>(
     new Set((contact.contactTasks ?? []).filter(t => t.completed).map(t => t.id))
@@ -566,7 +570,11 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       id: `cn-${Date.now()}`,
       body: newNoteBody.trim(),
       date: new Date().toISOString().split('T')[0],
-      author: 'You',
+      // AUDIT #519 (same class, missed call site) — this is PERSISTED to the
+      // contact's notes jsonb, not just rendered locally, so a hardcoded
+      // 'You' is what every other staff member reads as the author forever.
+      // `user` is already in scope here; line ~919 uses this exact fallback.
+      author: authorName,
     }
     const updated = [note, ...previous]
     localNotesRef.current = updated
@@ -586,7 +594,9 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
       dueDate: newTaskDue,
       completed: false,
       priority: newTaskPriority,
-      assignedTo: 'You',
+      // Also persisted (#519). A task assigned to "You" is unassigned as far
+      // as any other reader is concerned.
+      assignedTo: authorName,
     }
     const updated = [task, ...previous]
     localTasksRef.current = updated
@@ -916,7 +926,7 @@ function ContactPanel({ contact, onClose, onEdit, crmCompanies, deals, contracts
                   <LogActivityForm
                     onSave={handleSaveActivity}
                     onCancel={() => setLoggingActivity(false)}
-                    authorName={user?.name || user?.email || 'You'}
+                    authorName={authorName}
                   />
                 )}
 

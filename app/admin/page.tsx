@@ -369,7 +369,8 @@ export default function AdminPage() {
   const [showClearCacheModal, setShowClearCacheModal] = useState(false)
   const [showBackupModal, setShowBackupModal] = useState(false)
   const [showNewClientModal, setShowNewClientModal] = useState(false)
-  const [exportModule, setExportModule] = useState('All')
+  // AUDIT #770 — removed: the export UI selects entities via
+  // `exportEntities` below; this module filter was never set or read.
   const [exportEntities, setExportEntities] = useState<Record<string, boolean>>({
     contacts: true, companies: true, deals: true, projects: true,
     contracts: true, invoices: true, tasks: true, time_entries: true,

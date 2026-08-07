@@ -23,7 +23,9 @@ export default function PortalSetupPage() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [settingPassword, setSettingPassword] = useState(false)
+  // AUDIT #770 — removed. handlePasswordNext() is pure validation with no
+  // async work to indicate, and the real submit (handleCompleteSetup) has
+  // its own `completing` flag.
 
   const [displayName, setDisplayName] = useState('')
   const [completing, setCompleting] = useState(false)

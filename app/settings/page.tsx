@@ -361,7 +361,7 @@ export default function SettingsPage() {
   const [editTab, setEditTab] = useState<'details' | 'signature'>('details')
   const [sigDraft, setSigDraft] = useState<EmailSignatureData>(DEFAULT_SIGNATURE)
   const [sigSaving, setSigSaving] = useState(false)
-  const [showTempPw, setShowTempPw] = useState(false)
+  // AUDIT #770 — removed: never set and never read.
   const [inviteForm, setInviteForm] = useState({ name: '', email: '', role: 'Team Member', unit: 'Sales' })
   const [inviteSending, setInviteSending] = useState(false)
   const [inviteError, setInviteError] = useState('')

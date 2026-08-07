@@ -2106,28 +2106,36 @@ export default function SettingsPage() {
               </div>
 
               {pipelines.map(pipeline => (
-                <div key={pipeline.id} className="border border-gray-200 rounded-xl mb-3 overflow-hidden">
+                <div key={pipeline.id} className="border border-gray-200 rounded-xl mb-3 overflow-hidden relative">
+                  {/*
+                    Delete is a sibling of the accordion toggle, overlaid on its
+                    right edge — not a child of it. A <button> inside a <button>
+                    is invalid HTML; the browser's parser lifts the inner one
+                    out, so the server tree and the client tree disagree and
+                    React reports a hydration error. `stopPropagation` was
+                    protecting against a nesting that the browser had already
+                    undone. See AUDIT #786.
+                  */}
                   <button
                     onClick={() => setExpandedPipelineId(expandedPipelineId === pipeline.id ? null : pipeline.id)}
-                    className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                    className="w-full flex items-center justify-between px-4 py-3 pr-14 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
                   >
                     <div className="flex items-center gap-2">
                       <FolderKanban size={13} className="text-gray-400" />
                       <span className="text-sm font-semibold text-gray-800">{pipeline.name}</span>
                       <span className="text-xs text-gray-400">({pipeline.stages.length} stages)</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      {pipelines.length > 1 && (
-                        <button
-                          onClick={e => { e.stopPropagation(); setPipelines(prev => prev.filter(p => p.id !== pipeline.id)) }}
-                          className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      )}
-                      <ChevronRight size={13} className={`text-gray-400 transition-transform ${expandedPipelineId === pipeline.id ? 'rotate-90' : ''}`} />
-                    </div>
+                    <ChevronRight size={13} className={`text-gray-400 transition-transform ${expandedPipelineId === pipeline.id ? 'rotate-90' : ''}`} />
                   </button>
+                  {pipelines.length > 1 && (
+                    <button
+                      aria-label={`Delete ${pipeline.name}`}
+                      onClick={() => setPipelines(prev => prev.filter(p => p.id !== pipeline.id))}
+                      className="absolute right-9 top-[22px] -translate-y-1/2 p-1 text-gray-400 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  )}
 
                   {expandedPipelineId === pipeline.id && (
                     <div className="p-4 border-t border-gray-100">

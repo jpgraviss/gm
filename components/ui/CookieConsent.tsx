@@ -42,9 +42,22 @@ export default function CookieConsent() {
   if (!visible) return null
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-[9999] p-4 sm:p-6">
+    // z-[45]: above every piece of page chrome (the highest is z-40 — header
+    // dropdowns, the mobile sidebar backdrop, the FAB) and below every modal,
+    // which start at z-50. At z-[9999] this banner sat on top of all of them,
+    // and since it is a full-width bar pinned to the bottom of the viewport it
+    // covered the footer — the row with the submit button — of any modal tall
+    // enough to reach it. On a 1280x720 viewport that was measurably true of
+    // the Add Keyword modal: the banner's box ran from y=507 to y=720 and the
+    // "Add Keyword" button sat at y=626, so `elementFromPoint` at the button's
+    // centre returned the banner. A first-time visitor could not submit the
+    // form at all, and nothing about it looked broken. See AUDIT #785.
+    //
+    // pointer-events-none on the wrapper because its padding is transparent
+    // but was still swallowing clicks on whatever sat behind it.
+    <div className="fixed bottom-0 left-0 right-0 z-[45] p-4 sm:p-6 pointer-events-none">
       <div
-        className="mx-auto max-w-2xl rounded-2xl shadow-2xl border border-white/10 px-5 py-4 sm:px-6 sm:py-5"
+        className="mx-auto max-w-2xl rounded-2xl shadow-2xl border border-white/10 px-5 py-4 sm:px-6 sm:py-5 pointer-events-auto"
         style={{ background: '#015035' }}
       >
         <div className="flex items-start gap-3">

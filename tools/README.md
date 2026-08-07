@@ -20,7 +20,9 @@ credentials or network access to a deployed environment.
 | `schema.mjs` | Reads every SQL file under `supabase/` so fixture rows get the NOT NULL defaults an `INSERT` would. See "Phantom findings" below. |
 | `used-tables.mjs` | The tables the app actually queries, from its `.from('…')` call sites. A fixture table nothing reads is rejected at startup. |
 | `mint-session.mjs` | Signs a `gravhub-auth` cookie with the same HMAC scheme as `lib/session-cookie.ts`. |
-| `drive.mjs` | Drives pages in Chromium and reports where each landed, whether seeded data rendered, and any console/page errors. |
+| `browser.mjs` | Opens an authenticated browser and decides what counts as a real error. Shared by the two drivers so they cannot drift apart. |
+| `drive.mjs` | Crawls every route and reports where each landed, whether seeded data rendered, and any console/page errors. |
+| `interact.mjs` | Performs real user actions — click, fill, submit — and checks the result survived a reload. |
 
 ## Running it
 
@@ -39,6 +41,10 @@ npm run dev &
 
 HARNESS_COOKIE=$(SESSION_SIGNING_KEY=local-harness-signing-key node tools/mint-session.mjs) \
   node tools/drive.mjs
+
+# ...and the interaction scenarios, which actually change things:
+HARNESS_COOKIE=$(SESSION_SIGNING_KEY=local-harness-signing-key node tools/mint-session.mjs) \
+  node tools/interact.mjs
 ```
 
 `.env.local` is gitignored. Nothing here touches a real database, and no
@@ -99,6 +105,35 @@ stderr at shutdown rather than answering with `[]` — and whether a number is
 the first substantive find (AUDIT #776, every non-Stripe payment counting as
 $0 of revenue) came from noticing that Billing said `REVENUE COLLECTED $0`
 directly above a tab labelled `Paid (1)`.
+
+## Clicking things: `interact.mjs`
+
+The crawl proves 78 routes render. It never touches anything, so every write
+path in the app stayed unverified end to end — a form that posts nothing, a
+route that 500s on save, a field the API drops. All three look identical to a
+crawl, because the page they live on renders perfectly.
+
+Each scenario opens a page, performs the action, and then **navigates to the
+page afresh** and looks for what it created. The reload is the whole point:
+almost every list here updates optimistically (`setRows(prev => [created,
+...prev])`), so the post-click screen shows the new row whether or not anything
+was persisted. AUDIT #294 was an entire family of exactly that.
+
+Two things it does deliberately that look like oversights:
+
+- **It leaves the cookie banner undismissed.** Seeding consent would make every
+  scenario simpler, and would have hidden AUDIT #785 — the banner was `z-[9999]`
+  and covered the submit button of the first modal this file ever opened. A
+  first-time visitor is the harder case, so that is the case it runs.
+- **It stamps a random token into every value it types.** The contacts POST
+  rejects a duplicate email with a 409, so a fixed address passes once and fails
+  every run after it. Anything a scenario searches for after a reload has to be
+  a string nothing else could produce.
+
+When a click times out, the runner reports what `elementFromPoint` finds at the
+button's centre instead of the bare Playwright timeout. That one line is the
+difference between "Timeout 30000ms exceeded" and "covered by `<div
+class="fixed bottom-0 …">`", and it is how #785 was identified.
 
 ## Phantom findings, and why `schema.mjs` exists
 
@@ -167,6 +202,27 @@ NULL defaults, invented table names, absent nullable keys. When a page here
 looks broken, the first question is whether a real Postgres would have sent
 the same bytes.
 
+- **An unimplemented filter operator was ignored rather than refused.** The
+  fifth phantom, and the worst of them, because it made the fake *more
+  permissive* than PostgREST instead of less. `applyFilters` parsed
+  `col=op.value` against a fixed list of operators and did `if (!m) continue`
+  on anything else — so a filter it did not understand simply did not narrow
+  the result set. Four of the app's operators landed in that branch: `cs`
+  (`.contains`, 13 call sites), `ov` (`.overlaps`, 4), `not` (33), and the
+  top-level `or=` (20). Every crawl to date read those pages through filters
+  that were not applied.
+
+  The bill came due on `POST /api/crm/contacts`, whose duplicate check is
+  `.overlaps('emails', emails).limit(1).maybeSingle()`. With `ov` ignored that
+  matched the first contact in the table, so creating *any* contact with *any*
+  email returned 409 "A contact with this email already exists: Maya Chen".
+  A real bug and a fake that invents one are indistinguishable from outside.
+
+  All four are now implemented, and — the part that matters more — an operator
+  the fake does not know is a **501 with the offending filter in the body**,
+  recorded in the unmodelled list at shutdown. Refusing to answer is the only
+  safe response; the alternative is rows a real PostgREST would never have sent.
+
 The same trap has a protocol-shaped version. A crawl reported
 `GET /api/calendar/settings` as a 500 for a user with no calendar configured.
 The route was right — it branches on `error?.code === 'PGRST116'` to return
@@ -183,3 +239,9 @@ already labelled in the output:
 - **Editing source mid-crawl.** `next dev` recompiles under the running
   browser, so an edit made during a crawl shows up as a compile error on
   whichever page was unlucky. Let the crawl finish first.
+- **Running anything else heavy mid-crawl.** The crawl gives each page a fixed
+  3s to settle. Start the test suite alongside it and the slower pages navigate
+  away with requests still in flight, which lands as a cluster of
+  `neterr net::ERR_ABORTED` across half a dozen endpoints at once. That shape —
+  many endpoints, all aborted, one page — is the tell. `/reports/attribution`
+  reported `chars=11 errs=12` this way and `chars=761 errs=0` when re-run alone.

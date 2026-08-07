@@ -69,37 +69,124 @@ const schema = readSchema()
   }
 }
 
-/** PostgREST encodes filters as `col=op.value`. */
+/**
+ * Thrown when a query uses something this fake does not implement.
+ *
+ * Refusing to answer is the whole point. The first version of `applyFilters`
+ * did `if (!m) continue` on any operator it did not recognise, which means an
+ * unimplemented filter *widened* the result set instead of narrowing it — the
+ * fake was strictly more permissive than PostgREST, silently. Four of the
+ * app's query operators landed in that branch: `cs` (13 call sites), `ov` (4),
+ * `not` (33), and the top-level `or=` (20). The bill came due on
+ * `POST /api/crm/contacts`, whose duplicate check is
+ * `.overlaps('emails', emails).limit(1).maybeSingle()`. With `ov` ignored that
+ * matched the first contact in the table, so every attempt to create a contact
+ * — any contact, any email — came back 409 "already exists". A real
+ * application bug and a fake that invents one are indistinguishable from the
+ * outside, and this one had been quietly in place for every crawl so far.
+ */
+class UnmodelledQuery extends Error {}
+
+/** Splits `a.eq.1,b.eq.2` on top-level commas, ignoring those inside (…) or {…}. */
+function splitTopLevel(s) {
+  const out = []
+  let depth = 0, cur = ''
+  for (const ch of s) {
+    if (ch === '(' || ch === '{') depth++
+    else if (ch === ')' || ch === '}') depth--
+    if (ch === ',' && depth === 0) { out.push(cur); cur = '' } else cur += ch
+  }
+  if (cur) out.push(cur)
+  return out
+}
+
+/** `{a,b}` and `{"k":"v"}` — PostgREST's array and jsonb literals. */
+function parseSetLiteral(raw) {
+  const inner = raw.replace(/^\{|\}$/g, '')
+  if (!inner) return []
+  return inner.split(',').map(s => s.replace(/^"|"$/g, ''))
+}
+
+const asArray = v => (Array.isArray(v) ? v : v == null ? [] : [v])
+
+/**
+ * Turns one `op.value` clause into a predicate.
+ *
+ * `col` is the column; `expr` is everything after the `=`. Unknown operators
+ * throw rather than pass — see `UnmodelledQuery`.
+ */
+function makePredicate(col, expr) {
+  const m = /^([a-z]+)\.(.*)$/s.exec(expr)
+  if (!m) throw new UnmodelledQuery(`cannot parse filter ${col}=${expr}`)
+  const [, op, rest] = m
+
+  // `.not('col', 'is', null)` arrives as `col=not.is.null`.
+  if (op === 'not') {
+    const inner = makePredicate(col, rest)
+    return r => !inner(r)
+  }
+
+  const val = rest === 'null' ? null : rest
+  switch (op) {
+    case 'eq':  return r => String(r[col]) === String(val)
+    case 'neq': return r => String(r[col]) !== String(val)
+    case 'gt':  return r => r[col] > val
+    case 'gte': return r => r[col] >= val
+    case 'lt':  return r => r[col] < val
+    case 'lte': return r => r[col] <= val
+    case 'is':  return r => (val === null ? (r[col] === null || r[col] === undefined) : String(r[col]) === String(val))
+    case 'like':
+    case 'ilike': {
+      const re = new RegExp(
+        '^' + String(val).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*') + '$',
+        op === 'ilike' ? 'i' : '',
+      )
+      return r => r[col] != null && re.test(String(r[col]))
+    }
+    case 'in': {
+      // `in.("a","b")` — parenthesised, unlike the brace-delimited set types.
+      const values = String(val).replace(/^\(|\)$/g, '').split(',').map(s => s.replace(/^"|"$/g, ''))
+      return r => values.includes(String(r[col]))
+    }
+    // `.contains(col, [...])` — every listed element must be present.
+    case 'cs': {
+      const wanted = parseSetLiteral(String(val))
+      return r => { const have = asArray(r[col]).map(String); return wanted.every(w => have.includes(w)) }
+    }
+    // `.containedBy(col, [...])` — every stored element must be listed.
+    case 'cd': {
+      const allowed = parseSetLiteral(String(val)).map(String)
+      return r => asArray(r[col]).map(String).every(v => allowed.includes(v))
+    }
+    // `.overlaps(col, [...])` — the two sets share at least one element.
+    case 'ov': {
+      const wanted = parseSetLiteral(String(val)).map(String)
+      return r => asArray(r[col]).map(String).some(v => wanted.includes(v))
+    }
+    default:
+      throw new UnmodelledQuery(`filter operator "${op}" is not implemented (${col}=${expr})`)
+  }
+}
+
+/** PostgREST encodes filters as `col=op.value`, plus a top-level `or=(…)`. */
 function applyFilters(rows, params) {
   let out = rows
   for (const [key, raw] of params) {
-    if (['select', 'order', 'limit', 'offset', 'apikey'].includes(key)) continue
-    const m = /^(eq|neq|gt|gte|lt|lte|like|ilike|in|is|not)\.(.*)$/s.exec(raw)
-    if (!m) continue
-    const [, op, valRaw] = m
-    const val = valRaw === 'null' ? null : valRaw
-    out = out.filter(r => {
-      const v = r[key]
-      switch (op) {
-        case 'eq':  return String(v) === String(val)
-        case 'neq': return String(v) !== String(val)
-        case 'gt':  return v > val
-        case 'gte': return v >= val
-        case 'lt':  return v < val
-        case 'lte': return v <= val
-        case 'is':  return val === null ? (v === null || v === undefined) : String(v) === String(val)
-        case 'like':
-        case 'ilike': {
-          const re = new RegExp('^' + String(val).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*') + '$', op === 'ilike' ? 'i' : '')
-          return v != null && re.test(String(v))
-        }
-        case 'in': {
-          const set = String(val).replace(/^\(|\)$/g, '').split(',').map(s => s.replace(/^"|"$/g, ''))
-          return set.includes(String(v))
-        }
-        default: return true
-      }
-    })
+    if (['select', 'order', 'limit', 'offset', 'apikey', 'on_conflict'].includes(key)) continue
+
+    // `.or('a.eq.1,b.eq.2')` → `or=(a.eq.1,b.eq.2)`, any clause matching.
+    if (key === 'or' || key === 'and') {
+      const clauses = splitTopLevel(raw.replace(/^\(|\)$/g, '')).map(c => {
+        const dot = c.indexOf('.')
+        if (dot < 0) throw new UnmodelledQuery(`cannot parse ${key} clause "${c}"`)
+        return makePredicate(c.slice(0, dot), c.slice(dot + 1))
+      })
+      out = out.filter(r => (key === 'or' ? clauses.some(p => p(r)) : clauses.every(p => p(r))))
+      continue
+    }
+
+    const pred = makePredicate(key, raw)
+    out = out.filter(pred)
   }
   return out
 }
@@ -138,6 +225,22 @@ function runRpc(name, args) {
 }
 
 const server = createServer(async (req, res) => {
+  try {
+    await handle(req, res)
+  } catch (err) {
+    if (!(err instanceof UnmodelledQuery)) throw err
+    // A query this fake cannot answer correctly. Saying so — loudly, with a
+    // 501 the app will surface as an error rather than as data — is the only
+    // safe response: the alternative is returning rows that a real PostgREST
+    // would not have, which is how a fake starts inventing findings.
+    unmodelled.add(`query:${err.message}`)
+    console.error(`[fake-supabase] ${req.url}\n  ${err.message}`)
+    res.writeHead(501, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' })
+    res.end(JSON.stringify({ code: 'HARNESS', message: err.message, details: null, hint: null }))
+  }
+})
+
+async function handle(req, res) {
   const url = new URL(req.url, `http://localhost:${PORT}`)
   const send = (code, body) => {
     res.writeHead(code, {
@@ -252,7 +355,7 @@ const server = createServer(async (req, res) => {
   }
 
   return send(405, { message: `unhandled method ${req.method}` })
-})
+}
 
 server.listen(PORT, () => console.error(`[fake-supabase] listening on ${PORT}`))
 

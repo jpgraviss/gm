@@ -126,28 +126,40 @@ export default function CompanySelect({ value, onChange, placeholder = 'Select a
 
   return (
     <div ref={ref} className={`relative ${className ?? ''}`}>
+      {/*
+        The clear (×) control is a *sibling* of the trigger, overlaid on its
+        right edge, not a child of it. A <button> inside a <button> is invalid
+        HTML: React warns that it "cannot be a descendant of <button>" and will
+        cause a hydration error, and the browser's own parser resolves the
+        nesting by lifting the inner button out — so the server-rendered tree
+        and the client-rendered tree genuinely disagree about where the clear
+        button lives. `stopPropagation` cannot save it, because by then the two
+        elements are no longer nested. See AUDIT #786.
+      */}
       <button
         type="button"
         onClick={() => !disabled && setOpen(v => !v)}
         disabled={disabled}
         className={`w-full flex items-center gap-2 text-left text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white
           focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:bg-gray-50 disabled:cursor-not-allowed
-          ${!value ? 'text-gray-400' : 'text-gray-900'}`}
+          ${value && !disabled ? 'pr-9' : ''} ${!value ? 'text-gray-400' : 'text-gray-900'}`}
       >
         <Building2 size={14} className="text-gray-400 flex-shrink-0" />
         <span className="flex-1 truncate">{value || placeholder}</span>
-        {value && !disabled ? (
-          <button
-            type="button"
-            onClick={e => { e.stopPropagation(); onChange(''); }}
-            className="p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
-          >
-            <X size={12} />
-          </button>
-        ) : (
+        {!(value && !disabled) && (
           <ChevronDown size={14} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
         )}
       </button>
+      {value && !disabled && (
+        <button
+          type="button"
+          aria-label="Clear company"
+          onClick={() => onChange('')}
+          className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+        >
+          <X size={12} />
+        </button>
+      )}
 
       {open && (
         <div className="absolute top-full mt-1 left-0 right-0 z-50 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">

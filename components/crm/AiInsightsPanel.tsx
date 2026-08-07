@@ -84,11 +84,18 @@ export default function AiInsightsPanel({ type, name, context }: Props) {
   }
 
   return (
-    <div className="border border-emerald-200 rounded-xl overflow-hidden">
-      {/* Header toggle */}
+    <div className="border border-emerald-200 rounded-xl overflow-hidden relative">
+      {/*
+        Refresh is a sibling of the header toggle, overlaid on its right edge —
+        not a child of it. A <button> inside a <button> is invalid HTML; the
+        browser's parser lifts the inner one out, so the server tree and the
+        client tree disagree and React reports a hydration error.
+        `stopPropagation` was protecting against a nesting the browser had
+        already undone. See AUDIT #786.
+      */}
       <button
         onClick={handleToggle}
-        className="w-full flex items-center justify-between px-4 py-3 bg-emerald-50 hover:bg-emerald-100 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 pr-14 bg-emerald-50 hover:bg-emerald-100 transition-colors"
       >
         <div className="flex items-center gap-2">
           <Sparkles size={14} className="text-emerald-600" />
@@ -97,19 +104,18 @@ export default function AiInsightsPanel({ type, name, context }: Props) {
             <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.5 rounded-full font-medium">AI</span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          {insights && (
-            <button
-              onClick={e => { e.stopPropagation(); fetchInsights() }}
-              className="p-1 rounded-lg hover:bg-emerald-200 text-emerald-600 transition-colors"
-              title="Refresh insights"
-            >
-              <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-            </button>
-          )}
-          {open ? <ChevronUp size={14} className="text-emerald-600" /> : <ChevronDown size={14} className="text-emerald-600" />}
-        </div>
+        {open ? <ChevronUp size={14} className="text-emerald-600" /> : <ChevronDown size={14} className="text-emerald-600" />}
       </button>
+      {insights && (
+        <button
+          onClick={fetchInsights}
+          className="absolute right-9 top-[23px] -translate-y-1/2 p-1 rounded-lg hover:bg-emerald-200 text-emerald-600 transition-colors"
+          title="Refresh insights"
+          aria-label="Refresh insights"
+        >
+          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+        </button>
+      )}
 
       {/* Content */}
       {open && (

@@ -107,9 +107,24 @@ export const POST = withErrorHandler('sequences/webhooks POST', async (req: Next
       }
       const counterCol = counterMap[type]
       if (counterCol) {
-        const { data: bc } = await db.from('broadcasts').select(counterCol).eq('id', broadcastId).single()
-        const current = (bc as Record<string, number> | null)?.[counterCol] ?? 0
-        await db.from('broadcasts').update({ [counterCol]: current + 1 }).eq('id', broadcastId)
+        // AUDIT #769 — was SELECT-then-UPDATE. Resend posts one webhook per
+        // recipient per event, so a large broadcast lands thousands of these
+        // concurrently on the same row and the increments overwrite each
+        // other. Reported opens/clicks/deliveries came out systematically
+        // low, always in the direction that understates the campaign.
+        const { error: rpcErr } = await db.rpc('increment_broadcast_counter', {
+          p_id: broadcastId,
+          p_column: counterCol,
+        })
+        if (rpcErr) {
+          // The migration adding this function may not be applied yet. Fall
+          // back to the old racy path rather than dropping the count
+          // entirely — no worse than before, and loud enough to notice.
+          console.warn('[sequences/webhooks] increment_broadcast_counter unavailable, falling back:', rpcErr.message)
+          const { data: bc } = await db.from('broadcasts').select(counterCol).eq('id', broadcastId).single()
+          const current = (bc as Record<string, number> | null)?.[counterCol] ?? 0
+          await db.from('broadcasts').update({ [counterCol]: current + 1 }).eq('id', broadcastId)
+        }
       }
 
       // Bounces + complaints → global suppression

@@ -352,13 +352,23 @@ export async function executeWorkflow(
     // new one — only the original (non-resume) call counts toward runs/
     // last_run, so a Wait-paused-then-resumed execution isn't double-counted.
     if (!isResume) {
-      await supabase
-        .from('automations')
-        .update({
-          runs: (automation.runs ?? 0) + 1,
-          last_run: new Date().toISOString(),
-        })
-        .eq('id', automation.id)
+      // AUDIT #769 — was SELECT-then-UPDATE on `runs`. A bulk CSV import
+      // creating 200 contacts fires 200 `contact_created` triggers against
+      // this same row at once, so the displayed run count drifted below the
+      // number of runs that actually happened.
+      const { error: rpcErr } = await supabase.rpc('increment_automation_runs', { p_id: automation.id })
+      if (rpcErr) {
+        // Migration may not be applied yet — fall back to the previous
+        // behaviour rather than losing the counter entirely.
+        console.warn('[automations-engine] increment_automation_runs unavailable, falling back:', rpcErr.message)
+        await supabase
+          .from('automations')
+          .update({
+            runs: (automation.runs ?? 0) + 1,
+            last_run: new Date().toISOString(),
+          })
+          .eq('id', automation.id)
+      }
     }
 
     console.log(`[automations-engine] ${runStatus} "${automation.name}" (${automation.id}) — ${steps.filter(s => s.status === 'success').length}/${automation.actions.length} steps`)

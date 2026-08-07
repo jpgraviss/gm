@@ -24,6 +24,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { readSchema, applyDefaults } from './schema.mjs'
+import { usedTables } from './used-tables.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.argv[2] || 54321)
@@ -51,8 +52,18 @@ const schema = readSchema()
       for (const col of missing) errors.push(`${table}[${i}] (id=${row.id ?? '?'}) missing NOT NULL column with no default: ${col}`)
     })
   }
+  // A fixture table the app never reads is dead weight that looks like data.
+  // Four had accumulated, all misnamed (`tasks` for `app_tasks`, `pipelines`
+  // for config that lives in app_settings), and each made its page render
+  // empty — indistinguishable from the app failing to show its data. See
+  // tools/used-tables.mjs.
+  const used = usedTables()
+  for (const table of Object.keys(db)) {
+    if (!used.has(table)) errors.push(`no code queries table "${table}" — check the name against a .from('…') call site`)
+  }
+
   if (errors.length) {
-    console.error('[fake-supabase] fixtures.json does not satisfy supabase/schema.sql:')
+    console.error('[fake-supabase] fixtures.json does not match the app:')
     for (const e of errors) console.error('  -', e)
     process.exit(1)
   }

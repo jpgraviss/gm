@@ -112,7 +112,7 @@
       "value": 24000,
       "close_date": "2026-06-30",
       "owner_id": "tm-jonathan",
-      "pipeline_id": "pipe-default"
+      "pipeline_id": null
     },
     {
       "id": "dl-2",
@@ -124,21 +124,7 @@
       "value": 12500,
       "close_date": "2026-09-15",
       "owner_id": "tm-jonathan",
-      "pipeline_id": "pipe-default"
-    }
-  ],
-  "pipelines": [
-    {
-      "id": "pipe-default",
-      "name": "Default",
-      "stages": [
-        "Lead",
-        "Qualified",
-        "Proposal",
-        "Negotiation",
-        "Closed Won",
-        "Closed Lost"
-      ]
+      "pipeline_id": null
     }
   ],
   "invoices": [
@@ -254,26 +240,6 @@
       "due_date": "2026-10-01"
     }
   ],
-  "tasks": [
-    {
-      "id": "tk-1",
-      "title": "Draft Q3 SEO report",
-      "project_id": "pj-1",
-      "status": "In Progress",
-      "assignee": "Jonathan Graviss",
-      "due_date": "2026-08-20",
-      "sort_order": 1
-    },
-    {
-      "id": "tk-2",
-      "title": "Keyword gap analysis",
-      "project_id": "pj-1",
-      "status": "To Do",
-      "assignee": "Dana Reyes",
-      "due_date": "2026-08-25",
-      "sort_order": 2
-    }
-  ],
   "time_entries": [
     {
       "id": "te-1",
@@ -330,7 +296,8 @@
       "total_opened": 44,
       "total_clicked": 9,
       "total_bounced": 2,
-      "total_unsubscribed": 1
+      "total_unsubscribed": 1,
+      "subject": "August newsletter \u2014 August"
     }
   ],
   "broadcast_recipients": [],
@@ -363,14 +330,12 @@
     }
   ],
   "audit_logs": [],
-  "notifications": [],
   "monitored_sites": [],
   "tracked_keywords": [],
   "scheduled_emails": [],
   "social_posts": [],
   "proposals": [],
   "renewals": [],
-  "maintenance": [],
   "courses": [],
   "course_enrollments": [],
   "forms": [],
@@ -382,5 +347,30 @@
   "bookings": [],
   "calendar_settings": [],
   "google_integrations": [],
-  "client_integrations": []
+  "client_integrations": [],
+  "app_tasks": [
+    {
+      "id": "tk-1",
+      "title": "Draft Q3 SEO report",
+      "project_id": "pj-1",
+      "status": "In Progress",
+      "due_date": "2026-08-20",
+      "sort_order": 1,
+      "assigned_to": "Jonathan Graviss",
+      "company": "Acme Industrial",
+      "company_id": "co-acme"
+    },
+    {
+      "id": "tk-2",
+      "title": "Keyword gap analysis",
+      "project_id": "pj-1",
+      "status": "To Do",
+      "due_date": "2026-08-25",
+      "sort_order": 2,
+      "assigned_to": "Dana Reyes",
+      "company": "Acme Industrial",
+      "company_id": "co-acme"
+    }
+  ],
+  "maintenance_records": []
 }

@@ -11,14 +11,12 @@ import { getSettings } from '@/lib/settings'
 import { withErrorHandler } from '@/lib/api-handler'
 import { zonedWallTimeToUtc } from '@/lib/timezone'
 import { requireRole } from '@/lib/rbac'
+import { escapeHtml } from '@/lib/html-escape'
 
 // AUDIT #602 — calendar_settings.title/user_name is self-service, set by
 // any Team Member for their own calendar, then interpolated straight into
 // this confirmation email's HTML body with no escaping — the same bug
 // class already fixed at #570/#307, never applied to the booking flow.
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
 
 // GET /api/bookings?slug=jaycee-graviss&status=confirmed
 // This route's prefix is in proxy.ts's PUBLIC_PREFIXES so guest POSTs (the

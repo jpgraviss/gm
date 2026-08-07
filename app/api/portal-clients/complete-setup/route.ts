@@ -4,19 +4,13 @@ import { sendEmail } from '@/lib/email'
 import { getSettings, getSecuritySettings, passwordPolicyMinLength } from '@/lib/settings'
 import { logAudit } from '@/lib/audit'
 import { withErrorHandler } from '@/lib/api-handler'
+import { escapeHtml } from '@/lib/html-escape'
 
 // AUDIT #570 — displayName is free-text supplied by the portal client
 // completing setup, interpolated unescaped into an HTML email sent to
 // every admin inbox below. Matches the escapeHtml() convention already
 // used for this exact bug class in lib/portal-notify.ts and
 // app/api/forms/public/[slug]/route.ts.
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
 
 export const POST = withErrorHandler('portal-clients/complete-setup POST', async (req) => {
   const { email, code, password, displayName } = await req.json()

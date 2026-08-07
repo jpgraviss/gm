@@ -11,6 +11,7 @@ import { sendEmail } from '@/lib/email'
 import { getSettings } from '@/lib/settings'
 import { suppressionSet } from '@/lib/email-normalize'
 import { addMonthsClamped, todayISO } from '@/lib/date-math'
+import { escapeHtml } from '@/lib/html-escape'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type DB = any
@@ -65,9 +66,6 @@ export const DEFAULT_REVIEW_TEMPLATE = 'Happy Client Follow-Up'
 // form submission. Matches the escapeHtml() convention already used by
 // lib/rank-tracker.ts's buildReportHtml and app/api/forms/public/[slug]/
 // route.ts's own notify/confirmation emails (#386).
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
 
 function fillMergeTags(text: string, firstName: string, companyName: string): string {
   return text.replace(/\{\{\s*first_name\s*\}\}/gi, firstName).replace(/\{\{\s*company\s*\}\}/gi, companyName)

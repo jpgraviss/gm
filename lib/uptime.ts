@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { getResend } from '@/lib/resend'
 import { resolveSafeIp, createPinnedDispatcher } from '@/lib/ssrf-guard'
 import type { Agent } from 'undici'
+import { escapeHtml } from '@/lib/html-escape'
 
 /**
  * Website uptime monitoring.
@@ -310,11 +311,3 @@ export async function sendDownAlert(
   })
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}

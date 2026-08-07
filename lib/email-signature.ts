@@ -1,3 +1,4 @@
+import { escapeHtml } from '@/lib/html-escape'
 export interface EmailSignatureData {
   name: string
   title: string
@@ -30,9 +31,6 @@ export const SIGNATURE_MARKER = '<!--gravhub:signature-->'
 // unescaped-template bug class as #621, just narrower reach (a live preview
 // via dangerouslySetInnerHTML in the settings editor's own browser, and
 // auto-appending to a Super-Admin-gated user's outbound Gmail sends).
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
 
 export function generateSignatureHtml(sig: EmailSignatureData): string {
   const FOREST = '#015035'

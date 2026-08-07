@@ -1,3 +1,4 @@
+import { escapeHtml } from '@/lib/html-escape'
 export function generateId(): string {
   return `del-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
@@ -7,9 +8,6 @@ export function formatDate(date: Date | string): string {
   return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
 
 // AUDIT #621 — this used to substitute values with zero HTML escaping,
 // bitten 4 separate callers (#589 fixed generate-growth-report.ts locally

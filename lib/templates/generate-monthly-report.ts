@@ -1,14 +1,12 @@
 import { renderTemplate, formatDate } from './template-helpers'
 import type { AppSettings } from '@/lib/settings'
 import { BRAND_COLORS } from '@/lib/brand'
+import { escapeHtml } from '@/lib/html-escape'
 
 // AUDIT #621 — recommendations/changelog are interpolated directly into
 // the template literal below (not via renderTemplate's variables map), and
 // are reachable from a fully free-form POST /api/delivery/send-template
 // body — need their own escaping.
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
 
 export interface MonthlyReportMetrics {
   traffic?: {

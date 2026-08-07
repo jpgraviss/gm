@@ -43,7 +43,10 @@ describe('generateGrowthReportHtml — HTML escaping (#589)', () => {
 
     expect(html).not.toContain('<img src=x onerror="1">')
     expect(html).not.toContain('<script>1</script>')
-    expect(html).toContain('&lt;img src=x onerror="1"&gt;')
+    // AUDIT #766 — was `onerror="1"` with raw quotes. This file used to
+    // carry its own escapeHtml() that skipped quotes, while preparedBy below
+    // went through a stronger one; both now use lib/html-escape.ts.
+    expect(html).toContain('&lt;img src=x onerror=&quot;1&quot;&gt;')
     expect(html).toContain('&lt;script&gt;1&lt;/script&gt;')
   })
 
@@ -60,9 +63,9 @@ describe('generateGrowthReportHtml — HTML escaping (#589)', () => {
   it('escapes a malicious preparedBy name', () => {
     const html = generateGrowthReportHtml(buildData({ preparedBy: '<img src=x onerror="1">' }))
 
-    // preparedBy now flows through the shared renderTemplate() (AUDIT
-    // #621), which also escapes quotes — a strictly safer superset of the
-    // file's own local escapeHtml() the workLog/nextMonth fields still use.
+    // preparedBy flows through the shared renderTemplate() (AUDIT #621).
+    // Since #766 every field in this file escapes identically, so this is
+    // no longer the odd one out.
     expect(html).not.toContain('<img src=x onerror="1">')
     expect(html).toContain('&lt;img src=x onerror=&quot;1&quot;&gt;')
   })

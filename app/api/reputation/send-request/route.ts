@@ -5,6 +5,7 @@ import { getSettings } from '@/lib/settings'
 import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { escapeHtml } from '@/lib/html-escape'
 
 // AUDIT #529 — name/companyName here can trace back to CRM data set
 // unescaped by a public, unauthenticated form submission
@@ -12,9 +13,6 @@ import { requireRole } from '@/lib/rbac'
 // echoed unescaped into this real outbound HTML email. Matches the
 // escapeHtml() convention lib/rank-tracker.ts's buildReportHtml and the
 // forms notify/confirmation emails (#386) already use.
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
 
 export const POST = withErrorHandler('reputation/send-request POST', async (req) => {
   const denied = await requireRole(req, 'Team Member')

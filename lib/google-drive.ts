@@ -2,6 +2,7 @@
 
 import { encrypt, decrypt } from './encryption'
 import { createServiceClient } from './supabase'
+import { googleRedirectUri } from '@/lib/google-oauth-config'
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const DRIVE_API        = 'https://www.googleapis.com/drive/v3'
@@ -15,7 +16,9 @@ const SCOPES = [
 
 export function getDriveAuthUrl(state: string): string {
   const clientId = process.env.GOOGLE_CLIENT_ID ?? ''
-  const redirectUri = `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/drive/callback`
+  // AUDIT #784 — see lib/google-oauth-config.ts; this used to fall back to
+  // localhost in production.
+  const redirectUri = googleRedirectUri('drive')
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
@@ -40,7 +43,7 @@ export async function exchangeDriveCode(code: string): Promise<{
       code,
       client_id: process.env.GOOGLE_CLIENT_ID ?? '',
       client_secret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/drive/callback`,
+      redirect_uri: googleRedirectUri('drive'),
       grant_type: 'authorization_code',
     }),
   })

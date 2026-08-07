@@ -2,6 +2,7 @@
 
 import { encrypt, decrypt } from './encryption'
 import { zonedWallTimeToUtc, nowInZone } from './timezone'
+import { googleRedirectUri } from '@/lib/google-oauth-config'
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_CALENDAR  = 'https://www.googleapis.com/calendar/v3'
@@ -54,7 +55,10 @@ export interface TimeSlot {
 
 export function getGoogleAuthUrl(state: string): string {
   const clientId    = process.env.GOOGLE_CLIENT_ID!
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI!
+  // AUDIT #784 — GOOGLE_REDIRECT_URI is still honoured, but is no longer
+  // required: with it unset the URI derives from NEXT_PUBLIC_APP_URL like
+  // every other Google flow.
+  const redirectUri = googleRedirectUri('calendar')
   const params = new URLSearchParams({
     client_id:     clientId,
     redirect_uri:  redirectUri,
@@ -79,7 +83,7 @@ export async function exchangeCodeForTokens(code: string): Promise<{
       code,
       client_id:     process.env.GOOGLE_CLIENT_ID!,
       client_secret: process.env.GOOGLE_CLIENT_SECRET!,
-      redirect_uri:  process.env.GOOGLE_REDIRECT_URI!,
+      redirect_uri:  googleRedirectUri('calendar'),
       grant_type:    'authorization_code',
     }),
   })

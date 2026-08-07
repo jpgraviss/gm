@@ -3,6 +3,7 @@ import { getGoogleAuthUrl } from '@/lib/google-calendar'
 import { withErrorHandler } from '@/lib/api-handler'
 import { getAuthUser } from '@/lib/rbac'
 import { issueOAuthStateWithPayload } from '@/lib/oauth-state'
+import { assertGoogleOAuthConfigured } from '@/lib/google-oauth-config'
 
 // POST /api/calendar/auth
 // Body: { slug }
@@ -18,11 +19,12 @@ export const POST = withErrorHandler('calendar/auth POST', async (req) => {
     return NextResponse.json({ error: 'slug is required' }, { status: 400 })
   }
 
-  const clientId    = process.env.GOOGLE_CLIENT_ID
-  const redirectUri = process.env.GOOGLE_REDIRECT_URI
-  if (!clientId || !redirectUri) {
-    throw new Error('GOOGLE_CLIENT_ID and GOOGLE_REDIRECT_URI must be set in environment variables')
-  }
+  // AUDIT #784 — this used to throw a raw Error, which withErrorHandler turns
+  // into a 500, and in production it replaces the message with "Internal
+  // server error". So the single person able to fix a missing environment
+  // variable was shown the least useful sentence available. This now names
+  // exactly what is unset and answers 503, message intact (AUDIT #778).
+  assertGoogleOAuthConfigured()
 
   // AUDIT.md #194 — `state` previously carried userEmail/userName as a
   // plain, unsigned, attacker-decodable-and-forgeable payload with nothing

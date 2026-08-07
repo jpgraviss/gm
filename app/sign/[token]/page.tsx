@@ -52,17 +52,26 @@ export default function SignPage() {
 
   useEffect(() => {
     if (!token) return
+    // AUDIT #772 — this read `r.ok ? r.json() : null`, so every non-ok
+    // response collapsed to null and the `data.error` below threw a
+    // TypeError, which the catch then turned into one generic string. The
+    // route already returns the real reason with a 4xx — "Signature request
+    // not found", "Already signed", "Signature request has expired" — so a
+    // signer following a stale link was told only that something failed.
+    // Read the body whether or not the response was ok, and show what it
+    // actually said.
     fetch(`/api/signatures/${token}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (data.error) {
-          setError(data.error)
-        } else {
-          setSigReq(data)
-          if (data.signerName) setSignerName(data.signerName)
-          if (data.contract?.company) setCompanyName(data.contract.company)
-          setSignatureDate(new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }))
+      .then(async r => ({ ok: r.ok, body: await r.json().catch(() => null) }))
+      .then(({ ok, body }) => {
+        if (!ok || body?.error) {
+          setError(body?.error || 'Failed to load signature request')
+          return
         }
+        const data = body as SignatureData
+        setSigReq(data)
+        if (data.signerName) setSignerName(data.signerName)
+        if (data.contract?.company) setCompanyName(data.contract.company)
+        setSignatureDate(new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' }))
       })
       .catch(() => setError('Failed to load signature request'))
       .finally(() => setLoading(false))

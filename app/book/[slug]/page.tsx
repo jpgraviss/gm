@@ -153,10 +153,18 @@ export default function BookingPage({ params }: { params: Promise<{ slug: string
   // Load calendar settings
   useEffect(() => {
     fetch(`/api/calendar/settings/${slug}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => {
-        if (d?.error) setNotFound(true)
-        else setSettings(d)
+      // AUDIT #772 — `r.ok ? r.json() : null` meant a 404 (unknown or
+      // disabled slug — the single most likely outcome for a stale public
+      // booking link) arrived as null, `d?.error` was undefined, and the
+      // else-branch ran `setSettings(null)`. Since the render guard below is
+      // `!settings && !notFound`, that left the visitor on the loading
+      // spinner permanently. The "Calendar not found — this booking link
+      // doesn't exist or has been disabled" state was unreachable by the one
+      // path that most needs it. Treat any non-ok as not-found.
+      .then(async r => ({ ok: r.ok, body: await r.json().catch(() => null) }))
+      .then(({ ok, body }) => {
+        if (!ok || body?.error || !body) setNotFound(true)
+        else setSettings(body)
       })
       .catch(() => setNotFound(true))
   }, [slug])

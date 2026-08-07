@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { analyzeSocialPresence } from '@/lib/ai/social-analysis'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
+import { parseWebsiteUrl, fetchSafeHtml } from '@/lib/website-fetch'
 
 export const GET = withErrorHandler('crm/companies/[id]/social-analysis GET', async (
   req,
@@ -32,17 +33,16 @@ export const GET = withErrorHandler('crm/companies/[id]/social-analysis GET', as
 
   if (company.website) {
     try {
-      const normalized = /^https?:\/\//i.test(company.website) ? company.website : `https://${company.website}`
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 5000)
-      const res = await fetch(normalized, {
-        signal: controller.signal,
-        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; GravHubBot/1.0)', Accept: 'text/html' },
-        redirect: 'follow',
-      })
-      clearTimeout(timeout)
-      if (res.ok) {
-        const html = await res.text()
+      // AUDIT #764 — was a bare fetch() on the company's stored website with
+      // `redirect: 'follow'`, so a website field pointing at an internal
+      // address (or a site 302-ing to one) made the server issue that
+      // request. fetchSafeHtml pins the connection to a validated address
+      // and re-checks each hop; parseWebsiteUrl does the same
+      // scheme-prefixing this used to hand-roll.
+      const parsed = parseWebsiteUrl(company.website)
+      const fetched = parsed ? await fetchSafeHtml(parsed) : null
+      if (fetched?.ok) {
+        const html = fetched.html
         const patterns: [string, RegExp][] = [
           ['linkedin', /href=["'](https?:\/\/(?:www\.)?linkedin\.com\/(?:company|in)\/[^"'\s]+)["']/i],
           ['facebook', /href=["'](https?:\/\/(?:www\.)?facebook\.com\/[^"'\s]+)["']/i],

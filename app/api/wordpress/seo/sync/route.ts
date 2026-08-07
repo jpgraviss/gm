@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase'
 import { requireAdmin } from '@/lib/admin-auth'
 import { withErrorHandler } from '@/lib/api-handler'
+import { wpSafeFetch } from '@/lib/wordpress'
 
 export const POST = withErrorHandler('wordpress/seo/sync POST', async (req) => {
   const denied = await requireAdmin(req)
@@ -44,13 +45,16 @@ export const POST = withErrorHandler('wordpress/seo/sync POST', async (req) => {
 
   for (const candidate of candidateKeys) {
     try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 10000)
-      const heartbeat = await fetch(`${base}/wp-json/gravhub-seo/v1/heartbeat`, {
+      // AUDIT #764 — was a bare fetch() on a caller-supplied siteUrl, with
+      // redirects followed and the GravHub API key attached. Two problems:
+      // the server would reach whatever address that URL resolved to
+      // (169.254.169.254 included), and a site that answered with a 302
+      // off-origin walked away with the key. wpSafeFetch resolves the
+      // hostname, pins the connection to that exact address, re-validates
+      // every redirect hop, and strips credential headers across origins.
+      const heartbeat = await wpSafeFetch(`${base}/wp-json/gravhub-seo/v1/heartbeat`, {
         headers: { 'X-GravHub-Key': candidate },
-        signal: controller.signal,
-      })
-      clearTimeout(timeout)
+      }, 10_000)
 
       if (heartbeat.ok) {
         apiKey = candidate
@@ -73,17 +77,15 @@ export const POST = withErrorHandler('wordpress/seo/sync POST', async (req) => {
   }
 
   try {
-    const syncController = new AbortController()
-    const syncTimeout = setTimeout(() => syncController.abort(), 60000)
-    const syncRes = await fetch(`${base}/wp-json/gravhub-seo/v1/remote-sync`, {
+    // AUDIT #764 — see the heartbeat call above. 60s because a full remote
+    // sync is genuinely slow on a large site.
+    const syncRes = await wpSafeFetch(`${base}/wp-json/gravhub-seo/v1/remote-sync`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-GravHub-Key': apiKey,
       },
-      signal: syncController.signal,
-    })
-    clearTimeout(syncTimeout)
+    }, 60_000)
 
     const syncData = syncRes.ok ? await syncRes.json() : null
 

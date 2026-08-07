@@ -59,7 +59,12 @@ function compareVersions(a: string, b: string): number {
 // redirect-following (to re-validate each hop against SSRF), it has to
 // replicate that stripping itself or a compromised/malicious site could
 // 302 off-origin and walk away with the WordPress Application Password.
-const CREDENTIAL_HEADERS = ['authorization', 'cookie']
+// AUDIT #764 — `x-gravhub-key` was missing. The SEO plugin authenticates
+// with that header rather than Authorization, so a site could 302 off-origin
+// and collect the GravHub API key even through this loop. The list is
+// explicit rather than a heuristic on the header name, so adding a new
+// credential header is a deliberate act.
+const CREDENTIAL_HEADERS = ['authorization', 'cookie', 'x-gravhub-key']
 
 function stripCredentialHeadersCrossOrigin(
   headers: Record<string, string>,
@@ -84,7 +89,13 @@ function stripCredentialHeadersCrossOrigin(
 // mechanism lib/website-fetch.ts uses. The original hostname stays in the
 // request URL, so TLS SNI and the Host header sent to the origin are
 // unaffected — only the socket's real destination is pinned.
-async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Response> {
+//
+// AUDIT #764 — exported. `app/api/wordpress/seo/sync` was reaching a
+// DB-supplied site URL with a bare fetch(), which is the whole gap this
+// function exists to close, and it sent the GravHub API key with redirects
+// followed. `timeoutMs` is a parameter because that route's remote-sync
+// call legitimately needs longer than a health check.
+export async function wpSafeFetch(url: string, opts: RequestInit = {}, timeoutMs = WP_TIMEOUT): Promise<Response> {
   const wantsManual = opts.redirect === 'manual'
   const originalUrl = url
   let currentUrl = url
@@ -95,7 +106,7 @@ async function fetchWithTimeout(url: string, opts: RequestInit = {}): Promise<Re
       throw new Error('URL resolves to a private or internal address')
     }
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), WP_TIMEOUT)
+    const timer = setTimeout(() => controller.abort(), timeoutMs)
     const dispatcher = createPinnedDispatcher(resolution.ip, resolution.family)
     const requestInit: RequestInit & { dispatcher: Agent } = {
       ...opts,
@@ -147,7 +158,7 @@ export async function checkWordPress(
 
   // 1. Detect WordPress via /wp-json/
   try {
-    const res = await fetchWithTimeout(`${base}/wp-json/`)
+    const res = await wpSafeFetch(`${base}/wp-json/`)
     if (res.ok) {
       const data = await res.json()
       if (data.namespaces?.includes('wp/v2')) {
@@ -167,7 +178,7 @@ export async function checkWordPress(
 
   // 2. WP version from HTML generator meta tag
   try {
-    const res = await fetchWithTimeout(base)
+    const res = await wpSafeFetch(base)
     const html = await res.text()
     const match = html.match(/<meta name="generator" content="WordPress ([\d.]+)"/)
     if (match) result.wpVersion = match[1]
@@ -179,7 +190,7 @@ export async function checkWordPress(
   // one wp-admin itself calls) to make this a real check.
   if (result.wpVersion) {
     try {
-      const res = await fetchWithTimeout('https://api.wordpress.org/core/version-check/1.7/?version=1.0')
+      const res = await wpSafeFetch('https://api.wordpress.org/core/version-check/1.7/?version=1.0')
       if (res.ok) {
         const data = await res.json()
         const latest = data?.offers?.[0]?.version as string | undefined
@@ -190,13 +201,13 @@ export async function checkWordPress(
 
   // 3. Login page exposure
   try {
-    const res = await fetchWithTimeout(`${base}/wp-login.php`, { method: 'HEAD', redirect: 'manual' })
+    const res = await wpSafeFetch(`${base}/wp-login.php`, { method: 'HEAD', redirect: 'manual' })
     result.loginPageExposed = res.status === 200
   } catch { /* non-fatal */ }
 
   // 4. XML-RPC enabled
   try {
-    const res = await fetchWithTimeout(`${base}/xmlrpc.php`, { method: 'HEAD' })
+    const res = await wpSafeFetch(`${base}/xmlrpc.php`, { method: 'HEAD' })
     result.xmlRpcEnabled = res.status === 200 || res.status === 405
   } catch { /* non-fatal */ }
 
@@ -205,7 +216,7 @@ export async function checkWordPress(
     const auth = 'Basic ' + Buffer.from(`${credentials.username}:${credentials.password}`).toString('base64')
 
     try {
-      const res = await fetchWithTimeout(`${base}/wp-json/wp/v2/plugins`, {
+      const res = await wpSafeFetch(`${base}/wp-json/wp/v2/plugins`, {
         headers: { Authorization: auth },
       })
       if (res.ok) {
@@ -224,7 +235,7 @@ export async function checkWordPress(
     } catch { /* non-fatal */ }
 
     try {
-      const res = await fetchWithTimeout(`${base}/wp-json/wp/v2/themes`, {
+      const res = await wpSafeFetch(`${base}/wp-json/wp/v2/themes`, {
         headers: { Authorization: auth },
       })
       if (res.ok) {

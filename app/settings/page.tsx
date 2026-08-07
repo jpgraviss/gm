@@ -478,10 +478,20 @@ export default function SettingsPage() {
           setBranding(loadLS('gravhub_branding', BRANDING_DEFAULTS))
           return
         }
-        if (d.company          && Object.keys(d.company).length)           setCompany(d.company)
+        // AUDIT #782 — merged, not replaced. `company` is a jsonb blob and
+        // the stored row only ever holds the keys that were present when it
+        // was last written, so a row saved before a field existed (or by an
+        // older shape — the live row still carries a `legalName` key that no
+        // longer appears in COMPANY_DEFAULTS) left every absent field as
+        // `undefined`. React then flips those inputs from controlled to
+        // uncontrolled, the fields render blank instead of showing their
+        // defaults, and because JSON.stringify drops undefined keys the next
+        // Save writes the same partial object straight back. Every adjacent
+        // setter below already merges; this one and invoice_defaults did not.
+        if (d.company          && Object.keys(d.company).length)           setCompany(prev => ({ ...prev, ...d.company }))
         if (Array.isArray(d.notification_preferences?.activity) && d.notification_preferences.activity.length) setActivityNotifs(d.notification_preferences.activity)
         if (d.notification_preferences?.quiet_hours) setQuietHours(prev => ({ ...prev, ...d.notification_preferences.quiet_hours }))
-        if (d.invoice_defaults && Object.keys(d.invoice_defaults).length)  setInvoiceDefaults(d.invoice_defaults)
+        if (d.invoice_defaults && Object.keys(d.invoice_defaults).length)  setInvoiceDefaults(prev => ({ ...prev, ...d.invoice_defaults }))
         if (Array.isArray(d.pipelines) && d.pipelines.length) setPipelines(d.pipelines.map((p: PipelineConf) => ({ ...p, stages: Array.isArray(p.stages) ? p.stages : [] })))
         else if (Array.isArray(d.pipeline_stages) && d.pipeline_stages.length) setPipelines([{ id: 'sales', name: 'Sales Pipeline', stages: d.pipeline_stages.map((name: string, i: number) => ({ id: `s${i}`, name, color: STAGE_COLORS_CYCLE[i % STAGE_COLORS_CYCLE.length] })) }])
         if (Array.isArray(d.contact_tags)    && d.contact_tags.length)     setContactTags(d.contact_tags)

@@ -1,3 +1,4 @@
+import { NotConfiguredError } from '@/lib/integration-not-configured'
 /**
  * LinkedIn OAuth 2.0 wrapper for publishing.
  *
@@ -25,7 +26,7 @@ function redirectUri(): string {
 /** Build the LinkedIn consent URL. */
 export function linkedinAuthUrl(state: string): string {
   const clientId = process.env.LINKEDIN_CLIENT_ID
-  if (!clientId) throw new Error('LINKEDIN_CLIENT_ID not configured')
+  if (!clientId) throw new NotConfiguredError('LinkedIn', 'LinkedIn is not configured. Add its client credentials in Settings → Integrations.')
 
   const params = new URLSearchParams({
     response_type: 'code',
@@ -50,7 +51,7 @@ export async function exchangeLinkedInCode(code: string): Promise<LinkedInExchan
   const clientId = process.env.LINKEDIN_CLIENT_ID
   const clientSecret = process.env.LINKEDIN_CLIENT_SECRET
   if (!clientId || !clientSecret) {
-    throw new Error('LINKEDIN_CLIENT_ID / LINKEDIN_CLIENT_SECRET not configured')
+    throw new NotConfiguredError('LinkedIn', 'LinkedIn is not configured. Add its client credentials in Settings → Integrations.')
   }
 
   const tokenRes = await fetch(LI_TOKEN_URL, {

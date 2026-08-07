@@ -1,3 +1,4 @@
+import { NotConfiguredError } from '@/lib/integration-not-configured'
 const MERCURY_BASE = 'https://api.mercury.com/api/v1'
 
 async function getApiKey(): Promise<string | null> {
@@ -20,7 +21,7 @@ async function getApiKey(): Promise<string | null> {
 
 async function mercuryFetch(path: string) {
   const apiKey = await getApiKey()
-  if (!apiKey) throw new Error('Mercury API key not configured')
+  if (!apiKey) throw new NotConfiguredError('Mercury', 'Mercury is not configured. Add an API key in Settings → Integrations.')
 
   const res = await fetch(`${MERCURY_BASE}${path}`, {
     headers: { Authorization: `Bearer ${apiKey}`, Accept: 'application/json' },

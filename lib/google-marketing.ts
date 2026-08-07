@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { encrypt, decrypt } from '@/lib/encryption'
 import { DEFAULT_WORKSPACE_ID } from '@/lib/workspace'
 import { isWithinReauthWindow } from '@/lib/oauth-expiry'
+import { NotConfiguredError } from '@/lib/integration-not-configured'
 
 /**
  * Shared Google OAuth helper for the Phase C marketing products:
@@ -46,7 +47,7 @@ export function allMarketingScopes(): string[] {
 export function googleMarketingAuthUrl(state: string): string {
   const clientId = process.env.GOOGLE_CLIENT_ID
   const redirect = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'}/api/integrations/google-marketing/callback`
-  if (!clientId) throw new Error('GOOGLE_CLIENT_ID not configured')
+  if (!clientId) throw new NotConfiguredError('Google', 'Google is not configured. Add its OAuth client credentials in Settings → Integrations.')
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -79,7 +80,7 @@ export async function exchangeGoogleMarketingCode(code: string): Promise<GoogleT
   const redirect = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'}/api/integrations/google-marketing/callback`
 
   if (!clientId || !clientSecret) {
-    throw new Error('GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not configured')
+    throw new NotConfiguredError('Google', 'Google is not configured. Add its OAuth client credentials in Settings → Integrations.')
   }
 
   const res = await fetch('https://oauth2.googleapis.com/token', {
@@ -112,7 +113,7 @@ export async function refreshGoogleMarketingToken(refreshToken: string): Promise
   const clientId = process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET
   if (!clientId || !clientSecret) {
-    throw new Error('GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not configured')
+    throw new NotConfiguredError('Google', 'Google is not configured. Add its OAuth client credentials in Settings → Integrations.')
   }
 
   const res = await fetch('https://oauth2.googleapis.com/token', {

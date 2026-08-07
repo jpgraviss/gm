@@ -1,4 +1,5 @@
 import { Resend } from 'resend'
+import { NotConfiguredError } from '@/lib/integration-not-configured'
 
 // AUDIT #655 — this used to cache the decrypted key in a module-level
 // variable forever once resolved, with no invalidation on write. If an
@@ -29,6 +30,6 @@ async function getApiKey(): Promise<string | null> {
 
 export async function getResend(): Promise<Resend> {
   const key = await getApiKey()
-  if (!key) throw new Error('RESEND_API_KEY is not configured')
+  if (!key) throw new NotConfiguredError('Resend', 'Email sending is not configured. Add a Resend API key in Settings → Integrations.')
   return new Resend(key)
 }

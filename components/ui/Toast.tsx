@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, createContext, useContext } from 'react'
+import { useState, useEffect, useCallback, useRef, createContext, useContext } from 'react'
 import { X, AlertCircle, CheckCircle, Info } from 'lucide-react'
 
 interface Toast {
@@ -21,9 +21,24 @@ export function useToast() {
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([])
+  const nextId = useRef(0)
 
   const addToast = useCallback((message: string, type: Toast['type'] = 'error') => {
-    const id = Date.now()
+    // AUDIT #779 — was `Date.now()`, so any two toasts raised in the same
+    // millisecond shared an id. That is not a rare race: a page that fires
+    // several requests on mount and fails them together raises them in one
+    // tick. /intelligence does exactly that, and the duplicate key was how
+    // this was found.
+    //
+    // The React warning is the least of it. `removeToast` filters by id, so
+    // colliding toasts are removed *together* — the second disappears when
+    // the first's 4s timer fires — and React may drop one of the duplicates
+    // from the list outright. Either way the user is shown fewer errors than
+    // actually happened, which is the opposite of what a toast is for.
+    //
+    // A counter cannot collide, and unlike a timestamp it is unaffected by
+    // clock adjustments.
+    const id = ++nextId.current
     setToasts(prev => [...prev, { id, message, type }])
   }, [])
 

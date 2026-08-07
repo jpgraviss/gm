@@ -190,7 +190,21 @@ const server = createServer(async (req, res) => {
     const rows = applyOrderLimit(applyFilters(db[table], url.searchParams), url.searchParams)
     // `.single()` sends Accept: application/vnd.pgrst.object+json
     if ((req.headers.accept || '').includes('object')) {
-      if (rows.length !== 1) return send(406, { message: 'JSON object requested, multiple (or no) rows returned' })
+      if (rows.length !== 1) {
+        // The `code` matters as much as the status. Routes branch on it —
+        // `if (error?.code === 'PGRST116') return NextResponse.json(null)` is
+        // how "no row yet" is told apart from a real failure. An earlier
+        // version of this fake sent the message without the code, so that
+        // guard missed and GET /api/calendar/settings appeared to 500 for
+        // any user who had never configured a calendar. The app was right;
+        // the fake was lying. Match PostgREST's body exactly.
+        return send(406, {
+          code: 'PGRST116',
+          details: `The result contains ${rows.length} rows`,
+          hint: null,
+          message: 'JSON object requested, multiple (or no) rows returned',
+        })
+      }
       return send(200, rows[0])
     }
     return send(200, rows)

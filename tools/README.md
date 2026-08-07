@@ -120,3 +120,20 @@ rule applies to rows the app creates mid-run.
 The practical rule when this harness reports a crash: **check the schema
 before believing it.** If the field is NOT NULL, the fixture is wrong, not the
 app.
+
+The same trap has a protocol-shaped version. A crawl reported
+`GET /api/calendar/settings` as a 500 for a user with no calendar configured.
+The route was right — it branches on `error?.code === 'PGRST116'` to return
+`null` — but this fake's 406 body carried only a `message`, no `code`, so the
+guard missed. Routes branch on PostgREST's error *codes*, not its prose, so
+the fake has to send them. Fixed, and worth remembering: when the harness
+accuses a route, check what the real service would have sent.
+
+Two more things that are the crawl's own doing rather than findings, both
+already labelled in the output:
+
+- **429s.** The app rate-limits its own API routes, and ~70 pages back to back
+  trips it. Raise `HARNESS_DELAY` before believing a 429.
+- **Editing source mid-crawl.** `next dev` recompiles under the running
+  browser, so an edit made during a crawl shows up as a compile error on
+  whichever page was unlucky. Let the crawl finish first.

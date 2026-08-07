@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { encrypt, decrypt } from '@/lib/encryption'
 import { DEFAULT_WORKSPACE_ID } from '@/lib/workspace'
 import { isWithinReauthWindow } from '@/lib/oauth-expiry'
+import { NotConfiguredError } from '@/lib/integration-not-configured'
 
 /**
  * Meta (Facebook/Instagram) Marketing API wrapper.
@@ -40,7 +41,7 @@ function redirectUri(): string {
  */
 export function metaAuthUrl(state: string): string {
   const clientId = process.env.META_APP_ID
-  if (!clientId) throw new Error('META_APP_ID not configured')
+  if (!clientId) throw new NotConfiguredError('Meta Ads', 'Meta Ads is not configured. Add its app credentials in Settings → Integrations.')
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -79,7 +80,7 @@ export async function exchangeMetaCode(code: string): Promise<MetaExchangeResult
   const clientId = process.env.META_APP_ID
   const clientSecret = process.env.META_APP_SECRET
   if (!clientId || !clientSecret) {
-    throw new Error('META_APP_ID / META_APP_SECRET not configured')
+    throw new NotConfiguredError('Meta Ads', 'Meta Ads is not configured. Add its app credentials in Settings → Integrations.')
   }
 
   // Step 1: code → short-lived token

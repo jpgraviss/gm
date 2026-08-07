@@ -100,21 +100,28 @@ export const PATCH = withErrorHandler('settings PATCH', async (req) => {
   if (body.navigationConfig !== undefined) updates.navigation_config = body.navigationConfig
   if (body.notification_preferences !== undefined) updates.notification_preferences = body.notification_preferences
   if (body.emailTemplates       !== undefined) updates.email_templates      = body.emailTemplates
-  // These 7 integrations carry API keys/secrets (Stripe secret key, Mercury
+  // These integrations carry API keys/secrets (Stripe secret key, Mercury
   // bank-API key, HubSpot CRM token, etc.) — encrypt before they ever touch
   // the app_settings JSONB column, matching how the OAuth integrations
   // (Google Marketing, Meta, LinkedIn) encrypt tokens via lib/encryption.ts.
-  if (body.hubspot               !== undefined) updates.hubspot  = transformSecretFields(body.hubspot, ENCRYPTED_INTEGRATION_FIELDS.hubspot, encrypt)
-  if (body.resend                !== undefined) updates.resend   = transformSecretFields(body.resend, ENCRYPTED_INTEGRATION_FIELDS.resend, encrypt)
+  //
+  // AUDIT #768 — this was eight hand-written branches while GET (above)
+  // already looped the same map. The two halves being written differently
+  // is the drift risk: adding a ninth integration to the map gives it
+  // decrypt-on-read for free, so a forgotten encrypt branch would store the
+  // key in plaintext and `decrypt()` would no-op straight over it on the
+  // way back out — the key would work perfectly and be readable in the
+  // database. Now both directions iterate the one map.
+  for (const [column, fields] of Object.entries(ENCRYPTED_INTEGRATION_FIELDS)) {
+    if (body[column] !== undefined) {
+      updates[column] = transformSecretFields(body[column], fields, encrypt)
+    }
+  }
   if (body.google_reviews       !== undefined) updates.google_reviews       = body.google_reviews
   if (body.onboarding_completed !== undefined) updates.onboarding_completed = body.onboarding_completed
   if (body.approval_config      !== undefined) updates.approval_config      = body.approval_config
   if (body.gsc_site_url         !== undefined) updates.gsc_site_url         = body.gsc_site_url
   if (body.gsc_last_sync        !== undefined) updates.gsc_last_sync        = body.gsc_last_sync
-  if (body.mercury               !== undefined) updates.mercury  = transformSecretFields(body.mercury, ENCRYPTED_INTEGRATION_FIELDS.mercury, encrypt)
-  if (body.serpapi               !== undefined) updates.serpapi  = transformSecretFields(body.serpapi, ENCRYPTED_INTEGRATION_FIELDS.serpapi, encrypt)
-  if (body.maverick              !== undefined) updates.maverick = transformSecretFields(body.maverick, ENCRYPTED_INTEGRATION_FIELDS.maverick, encrypt)
-  if (body.apollo                !== undefined) updates.apollo   = transformSecretFields(body.apollo, ENCRYPTED_INTEGRATION_FIELDS.apollo, encrypt)
   if (body.trainingModules      !== undefined) updates.training_modules     = body.trainingModules
   // AUDIT — `sops` defaults to `[]` at the DB level (not null), so an
   // untouched row and a deliberately-emptied-and-saved row were otherwise
@@ -125,8 +132,6 @@ export const PATCH = withErrorHandler('settings PATCH', async (req) => {
   if (body.sops !== undefined) { updates.sops = body.sops; updates.sops_configured = true }
   if (body.security             !== undefined) updates.security             = body.security
   if (body.wordpress            !== undefined) updates.wordpress            = body.wordpress
-  if (body.granola               !== undefined) updates.granola = transformSecretFields(body.granola, ENCRYPTED_INTEGRATION_FIELDS.granola, encrypt)
-  if (body.stripe                !== undefined) updates.stripe  = transformSecretFields(body.stripe, ENCRYPTED_INTEGRATION_FIELDS.stripe, encrypt)
 
   const { data, error } = await db
     .from('app_settings')

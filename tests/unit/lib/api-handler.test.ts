@@ -54,6 +54,48 @@ describe('withErrorHandler', () => {
     expect(body).toEqual({ error: 'Internal server error' })
   })
 
+  // AUDIT #771 — the branch that actually protects a caller had no test.
+  // In the suite NODE_ENV is 'test', so every case above takes the
+  // raw-message path; the production path — which is what stops a Postgres
+  // error string, a config variable name or a file path reaching an
+  // external caller — was never exercised. Verified by hand against a real
+  // production build (a route whose DB call failed returned
+  // {"error":"Internal server error"}); this keeps it true.
+  it('replaces the real message with a generic one in production', async () => {
+    const prev = process.env.NODE_ENV
+    // NODE_ENV is readonly in the Next.js types, hence the cast.
+    ;(process.env as Record<string, string>).NODE_ENV = 'production'
+    try {
+      const handler = withErrorHandler('test', async () => {
+        throw new Error('relation "invoices" does not exist')
+      })
+
+      const res = await handler(makeRequest())
+      const body = await res.json()
+
+      expect(res.status).toBe(500)
+      expect(body).toEqual({ error: 'Internal server error' })
+      expect(JSON.stringify(body)).not.toContain('invoices')
+    } finally {
+      ;(process.env as Record<string, string>).NODE_ENV = prev as string
+    }
+  })
+
+  it('still reports the real error to Sentry in production', async () => {
+    // Sanitising the response must not sanitise the diagnostics — the whole
+    // point is that the detail goes to logs and Sentry instead.
+    const prev = process.env.NODE_ENV
+    ;(process.env as Record<string, string>).NODE_ENV = 'production'
+    try {
+      const err = new Error('relation "invoices" does not exist')
+      const handler = withErrorHandler('invoices GET', async () => { throw err })
+      await handler(makeRequest())
+      expect(Sentry.captureException).toHaveBeenCalledWith(err, expect.anything())
+    } finally {
+      ;(process.env as Record<string, string>).NODE_ENV = prev as string
+    }
+  })
+
   it('calls Sentry.captureException with context', async () => {
     const err = new Error('Tracked error')
     const handler = withErrorHandler('deals POST', async () => {

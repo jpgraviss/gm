@@ -1,3 +1,4 @@
+import { NotConfiguredError } from '@/lib/integration-not-configured'
 const BASE = 'https://api-v1.maverickintelligence.co'
 
 // AUDIT #655 — same stale-key-cache bug class as lib/resend.ts, fixed
@@ -20,7 +21,7 @@ async function getApiKey(): Promise<string> {
       return decrypt(encryptedKey)
     }
   } catch { /* fall through */ }
-  throw new Error('MAVERICK_API_KEY not set')
+  throw new NotConfiguredError('Maverick', 'Maverick Intelligence is not configured. Add an API key in Settings → Integrations.')
 }
 
 async function headers() {

@@ -173,14 +173,71 @@ export default function SignPage() {
   }
 
   if (error && !sigReq) {
+    // AUDIT #777 — this used to render "Link Not Found / This signature link
+    // is invalid or has been removed" for every load failure, discarding the
+    // reason the route had just supplied. A transient 500 therefore told a
+    // client their contract link was dead, so they stopped trying instead of
+    // reloading. `notFound` is the only case that genuinely warrants that
+    // wording; anything else says what happened and invites a retry.
+    const notFound = /not found/i.test(error)
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center max-w-md w-full">
           <div className="w-14 h-14 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="#ef4444" strokeWidth="2" strokeLinecap="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           </div>
-          <h2 className="text-lg font-bold text-gray-900 mb-2" style={{ fontFamily: "'Syncopate', sans-serif" }}>Link Not Found</h2>
-          <p className="text-sm text-gray-500">This signature link is invalid or has been removed.</p>
+          <h2 className="text-lg font-bold text-gray-900 mb-2" style={{ fontFamily: "'Syncopate', sans-serif" }}>
+            {notFound ? 'Link Not Found' : 'Unable to Load'}
+          </h2>
+          <p className="text-sm text-gray-500">
+            {notFound ? 'This signature link is invalid or has been removed.' : error}
+          </p>
+          {!notFound && (
+            <p className="text-xs text-gray-400 mt-3">Please refresh the page, or contact us if this keeps happening.</p>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  // AUDIT #777 — a link that cannot be signed must say so *before* the
+  // signing UI, not after. The route rejects both of these on submit
+  // ("Already signed", "Signature request has expired") and always has, but
+  // the page ignored the `status` and `expiresAt` it is handed on load and
+  // rendered the full form regardless. A client following a stale link drew
+  // or typed their signature, agreed to the terms, pressed Sign, and only
+  // then learned it was never going to work — on the single most
+  // business-critical external flow in the product.
+  if (sigReq && sigReq.status === 'signed') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center max-w-md w-full">
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: '#01503515' }}>
+            <svg width="32" height="32" fill="none" viewBox="0 0 24 24"><path stroke="#015035" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+          </div>
+          <h2 className="text-lg font-bold text-gray-900 mb-2" style={{ fontFamily: "'Syncopate', sans-serif" }}>Already Signed</h2>
+          <p className="text-sm text-gray-500">
+            {sigReq.contract?.company ? `The agreement for ${sigReq.contract.company} has already been signed` : 'This agreement has already been signed'}
+            {sigReq.signedAt ? ` on ${new Date(sigReq.signedAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}` : ''}.
+          </p>
+          <p className="text-xs text-gray-400 mt-3">No further action is needed. Contact us if you need another copy.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (sigReq && sigReq.expiresAt && new Date(sigReq.expiresAt) < new Date()) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center max-w-md w-full">
+          <div className="w-14 h-14 rounded-full bg-amber-50 flex items-center justify-center mx-auto mb-4">
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24"><path stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          </div>
+          <h2 className="text-lg font-bold text-gray-900 mb-2" style={{ fontFamily: "'Syncopate', sans-serif" }}>Link Expired</h2>
+          <p className="text-sm text-gray-500">
+            This signature link expired on {new Date(sigReq.expiresAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}.
+          </p>
+          <p className="text-xs text-gray-400 mt-3">Please contact us and we&apos;ll send you a new one.</p>
         </div>
       </div>
     )

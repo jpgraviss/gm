@@ -150,6 +150,23 @@ one's definition. Only `broadcasts.subject` was a genuine gap. Worth
 repeating: **when this tooling accuses the fixtures, verify the accusation
 before acting on it**, exactly as you would when it accuses the app.
 
+- **Nullable columns were omitted rather than served as `null`.** A real
+  `INSERT` followed by `select('*')` returns every column, with unspecified
+  nullable ones as `null`. This fake returned only the keys the fixture
+  happened to list, so those columns came back `undefined` instead. That is
+  not a harmless difference: the app is full of `x === null` guards, and a
+  strict comparison against `undefined` is false, so every one of them
+  silently failed to fire. `/audits/[id]` rendered `undefined/100 Overall
+  Score` because of it, and its `overall_score === null ? 'Unavailable' : …`
+  guard had been correct the whole time. Fixture rows are now filled to the
+  full column set.
+
+That is the fourth phantom this fake produced, and all four shared one cause:
+**it was not shaped like PostgREST.** Missing `PGRST116` codes, missing NOT
+NULL defaults, invented table names, absent nullable keys. When a page here
+looks broken, the first question is whether a real Postgres would have sent
+the same bytes.
+
 The same trap has a protocol-shaped version. A crawl reported
 `GET /api/calendar/settings` as a 500 for a user with no calendar configured.
 The route was right — it branches on `error?.code === 'PGRST116'` to return

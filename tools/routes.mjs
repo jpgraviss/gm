@@ -55,3 +55,56 @@ export function staticRoutes() {
     .filter(r => !SKIP.some(s => r === s || r.startsWith(s + '/')))
     .sort()
 }
+
+/**
+ * Which fixture table supplies the id for each dynamic route, and which
+ * column to read.
+ *
+ * Detail pages were the largest untested surface left: the crawl covered 71
+ * parameterless routes and none of the `[id]` ones, which is where record
+ * rendering, tab state and per-entity permissions actually live.
+ *
+ * Kept as an explicit map because the link between a URL segment and a table
+ * is a judgement call — `/audits/[id]` reads `audits`, `/sign/[token]` reads a
+ * *token column* rather than an id — and guessing it wrongly produces exactly
+ * the phantom findings this harness has already generated three times. Any
+ * route missing from here is reported by `dynamicRoutes()` rather than
+ * silently skipped, so the gap stays visible.
+ */
+const DYNAMIC = {
+  '/audits/[id]':                    { table: 'audits', column: 'id' },
+  '/chatbots/[id]/conversations':    { table: 'chatbots', column: 'id' },
+  '/courses/[id]':                   { table: 'courses', column: 'id' },
+  '/client/courses/[id]':            { table: 'courses', column: 'id' },
+  '/crm/sequences/[id]':             { table: 'sequences', column: 'id' },
+  '/projects/[id]':                  { table: 'projects', column: 'id' },
+  '/sign/[token]':                   { table: 'signature_requests', column: 'token' },
+  // Public marketing/booking slugs and the client-facing service pages take
+  // their segment from config rather than a table row, so they are driven
+  // explicitly via HARNESS_PAGES when wanted rather than guessed at here.
+}
+
+/**
+ * Concrete URLs for the app's dynamic routes, built from fixture rows.
+ *
+ * @returns {{routes: string[], unmapped: string[], empty: string[]}}
+ *   `unmapped` names dynamic routes with no entry in DYNAMIC; `empty` names
+ *   mapped ones whose fixture table has no rows. Both are coverage gaps and
+ *   are reported rather than hidden.
+ */
+export function dynamicRoutes(fixtures) {
+  const all = walk(APP).filter(r => r.includes('['))
+    .filter(r => !SKIP.some(s => r === s || r.startsWith(s + '/')))
+  const routes = []
+  const unmapped = []
+  const empty = []
+  for (const route of all.sort()) {
+    const spec = DYNAMIC[route]
+    if (!spec) { unmapped.push(route); continue }
+    const rows = fixtures[spec.table] ?? []
+    const value = rows[0]?.[spec.column]
+    if (value === undefined || value === null) { empty.push(`${route} (${spec.table}.${spec.column})`); continue }
+    routes.push(route.replace(/\[[^\]]+\]/, String(value)))
+  }
+  return { routes, unmapped, empty }
+}

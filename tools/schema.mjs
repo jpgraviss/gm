@@ -174,7 +174,19 @@ export function applyDefaults(table, row, schema) {
   const missing = []
   for (const [name, col] of Object.entries(cols)) {
     if (out[name] !== undefined) continue
-    if (!col.notNull) continue
+    if (!col.notNull) {
+      // A nullable column that the INSERT omitted still exists on the row —
+      // `select('*')` reads it back as null, not as an absent key. Omitting
+      // it here is not a harmless shortcut: the app is full of `x === null`
+      // guards, and a strict comparison against `undefined` is false, so
+      // every one of them silently fails to fire. `/audits/[id]` rendered
+      // "undefined/100 Overall Score" for exactly this reason, and its
+      // `overall_score === null ? 'Unavailable' : …` guard was correct all
+      // along. Same class as the missing PGRST116 code: when the fake is not
+      // shaped like PostgREST, it accuses working code.
+      out[name] = null
+      continue
+    }
     if (col.hasDefault && col.default !== undefined) { out[name] = col.default; continue }
     missing.push(name)
   }

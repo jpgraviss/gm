@@ -1060,8 +1060,10 @@ export default function ContractsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false)
   const [viewFilter, setViewFilter] = useState<ViewFilter>('Active')
-  const [showTerminateModal, setShowTerminateModal] = useState(false)
-  const [terminateReason, setTerminateReason] = useState('')
+  // AUDIT #770 — page-level terminate state removed: the live flow is
+  // ContractPanel's own `showTerminateConfirm` / `terminateReasonInput`
+  // (see its Terminate button and modal). This pair was never set or read
+  // and is left over from a superseded design.
   const [generateFromProposalId, setGenerateFromProposalId] = useState<string | undefined>(undefined)
   // AUDIT.md #400/#137 — "Convert to Project" / "Link Existing Project"
   // affordances, opened from ContractPanel's project tab.

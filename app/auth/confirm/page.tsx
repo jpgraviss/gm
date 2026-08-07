@@ -116,10 +116,20 @@ export default function AuthConfirmPage() {
     }
 
     // 1. Subscribe to auth state changes (implicit flow + OAuth)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // AUDIT #775 — synchronous callback, work deferred with setTimeout.
+    // supabase-js runs these callbacks while holding its auth lock and
+    // `await`s each one, so anything awaited here blocks every other
+    // Supabase call in the tab until it finishes. resolveProfileAndRedirect
+    // makes two network round-trips before it returns, and it is one edit
+    // away from needing supabase-js itself — at which point this would
+    // deadlock outright, exactly as contexts/AuthContext.tsx did. Its own
+    // `cancelled`/`resolving` guards run at entry, so deferring is safe.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return
       if (event === 'SIGNED_IN' && session?.user?.email && session.access_token) {
-        await resolveProfileAndRedirect(session.user.email.toLowerCase(), session.access_token)
+        const email = session.user.email.toLowerCase()
+        const accessToken = session.access_token
+        setTimeout(() => { void resolveProfileAndRedirect(email, accessToken) }, 0)
       }
     })
 

@@ -8,6 +8,7 @@ import { useToast } from '@/components/ui/Toast'
 import { RefreshCw } from 'lucide-react'
 import type { Deal, Invoice, RevenueMonth } from '@/lib/types'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
+import { collectedAmount } from '@/lib/invoice-collected'
 
 type DateRange = '3M' | '6M' | '12M' | 'Custom'
 
@@ -104,9 +105,10 @@ export default function RevenueReportPage() {
   const closedWon = filteredDeals.filter(d => d.stage === 'Closed Won')
   const closedWonTotal = closedWon.reduce((s, d) => s + d.value, 0)
   // AUDIT #587 — an invoice's amount can be edited after Stripe payment
-  // (#358); amountPaid records what was actually charged. Prefer it,
-  // falling back to amount only when unset (manual/non-Stripe payments).
-  const collected = filteredInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + (i.amountPaid ?? i.amount), 0)
+  // (#358); amountPaid records what was actually charged, so prefer it.
+  // AUDIT #776 — via collectedAmount(); the old `??` read every invoice
+  // marked Paid outside Stripe as $0, since amount_paid defaults to 0.
+  const collected = filteredInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + collectedAmount(i), 0)
 
   const topDeals = useMemo(() => {
     return [...filteredDeals]

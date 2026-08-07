@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { getAuthUser } from '@/lib/rbac'
 import { contractMonthlyValue } from '@/lib/metrics'
 import type { OccupationalUnit } from '@/lib/types'
+import { collectedAmount } from '@/lib/invoice-collected'
 
 /** Units that must never receive financial data */
 const RESTRICTED_UNITS: OccupationalUnit[] = ['Contractors', 'Client']
@@ -72,9 +73,11 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
   const openDeals       = deals.filter(d => !d.stage.startsWith('Closed')).length
   const pipelineValue   = deals.filter(d => !d.stage.startsWith('Closed')).reduce((s: number, d: { value: number }) => s + (d.value ?? 0), 0)
   // AUDIT #587 — an invoice's `amount` can be edited after Stripe payment
-  // (#358); `amount_paid` records what was actually charged. Prefer it,
-  // falling back to `amount` only when unset (manual/non-Stripe payments).
-  const totalCollected  = invoices.filter((i: { status: string }) => i.status === 'Paid').reduce((s: number, i: { amount: number; amount_paid: number | null }) => s + (i.amount_paid ?? i.amount ?? 0), 0)
+  // (#358); `amount_paid` records what was actually charged, so prefer it.
+  // AUDIT #776 — via collectedAmount(): `amount_paid ?? amount` counted
+  // every hand-marked-Paid invoice as zero, since the column defaults to 0
+  // and `??` only falls back on null.
+  const totalCollected  = invoices.filter((i: { status: string }) => i.status === 'Paid').reduce((s: number, i: { amount: number; amount_paid: number | null }) => s + collectedAmount(i), 0)
   const overdueInvoices = invoices.filter((i: { status: string }) => i.status === 'Overdue').length
 
   const now = Date.now()
@@ -150,7 +153,8 @@ export const GET = withErrorHandler('dashboard GET', async (req) => {
       if (!bucket) return // outside the trailing 12-month window
       // AUDIT #587 — prefer amount_paid (what Stripe actually charged) over
       // the editable amount field, same fix as totalCollected above.
-      const amount = Number(i.amount_paid ?? i.amount) || 0
+      // AUDIT #776 — shared helper, same zero-default reason.
+      const amount = collectedAmount(i as { amount?: number; amount_paid?: number | null })
       bucket.revenue += amount
       const contract = i.contract_id ? contractById.get(i.contract_id as string) : undefined
       if (contract && contractMonthlyValue({

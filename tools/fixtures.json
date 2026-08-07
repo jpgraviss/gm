@@ -1,0 +1,374 @@
+{
+  "team_members": [
+    {
+      "id": "tm-jonathan",
+      "name": "Jonathan Graviss",
+      "email": "jonathangraviss@gmail.com",
+      "role": "Owner",
+      "unit": "Leadership/Admin",
+      "is_admin": true,
+      "status": "active",
+      "access_schedule": null,
+      "two_factor_enabled": false,
+      "gmail_email": null,
+      "gmail_access_token": null
+    },
+    {
+      "id": "tm-second",
+      "name": "Dana Reyes",
+      "email": "dana@example.test",
+      "role": "Account Manager",
+      "unit": "Delivery",
+      "is_admin": false,
+      "status": "active",
+      "access_schedule": null
+    }
+  ],
+  "app_settings": [
+    {
+      "id": "global",
+      "company": {
+        "name": "Graviss Marketing",
+        "legalName": "Graviss Marketing, LLC",
+        "email": "info@example.test",
+        "timezone": "America/Chicago",
+        "currency": "USD"
+      },
+      "branding": {},
+      "email_defaults": {},
+      "dashboard_config": {},
+      "security": {
+        "sessionTimeout": "24h",
+        "twoFactor": "disabled",
+        "passwordPolicy": "basic",
+        "auditLogging": true
+      },
+      "sops": [],
+      "sops_configured": false,
+      "wordpress": {
+        "apiKeys": []
+      }
+    }
+  ],
+  "crm_companies": [
+    {
+      "id": "co-acme",
+      "name": "Acme Industrial",
+      "industry": "Manufacturing",
+      "website": "https://acme.test",
+      "company_id": "co-acme",
+      "services": [
+        "SEO",
+        "Web Design"
+      ],
+      "status": "Active"
+    },
+    {
+      "id": "co-brightw",
+      "name": "Brightwater Dental",
+      "industry": "Healthcare",
+      "website": "https://brightwater.test",
+      "company_id": "co-brightw",
+      "services": [
+        "SEO"
+      ],
+      "status": "Active"
+    }
+  ],
+  "crm_contacts": [
+    {
+      "id": "ct-1",
+      "full_name": "Maya Chen",
+      "emails": [
+        "maya@acme.test"
+      ],
+      "company_id": "co-acme",
+      "company_name": "Acme Industrial",
+      "lifecycle_stage": "Customer",
+      "owner_id": "tm-jonathan",
+      "title": "Ops Director"
+    },
+    {
+      "id": "ct-2",
+      "full_name": "Owen Patel",
+      "emails": [
+        "owen@brightwater.test"
+      ],
+      "company_id": "co-brightw",
+      "company_name": "Brightwater Dental",
+      "lifecycle_stage": "Lead",
+      "owner_id": "tm-jonathan",
+      "title": "Practice Manager"
+    }
+  ],
+  "deals": [
+    {
+      "id": "dl-1",
+      "name": "Acme \u2014 SEO retainer",
+      "company_id": "co-acme",
+      "company": "Acme Industrial",
+      "contact_id": "ct-1",
+      "stage": "Closed Won",
+      "value": 24000,
+      "close_date": "2026-06-30",
+      "owner_id": "tm-jonathan",
+      "pipeline_id": "pipe-default"
+    },
+    {
+      "id": "dl-2",
+      "name": "Brightwater \u2014 site rebuild",
+      "company_id": "co-brightw",
+      "company": "Brightwater Dental",
+      "contact_id": "ct-2",
+      "stage": "Proposal",
+      "value": 12500,
+      "close_date": "2026-09-15",
+      "owner_id": "tm-jonathan",
+      "pipeline_id": "pipe-default"
+    }
+  ],
+  "pipelines": [
+    {
+      "id": "pipe-default",
+      "name": "Default",
+      "stages": [
+        "Lead",
+        "Qualified",
+        "Proposal",
+        "Negotiation",
+        "Closed Won",
+        "Closed Lost"
+      ]
+    }
+  ],
+  "invoices": [
+    {
+      "id": "inv-1",
+      "invoice_number": "INV-1001",
+      "company_id": "co-acme",
+      "company": "Acme Industrial",
+      "amount": 2000,
+      "status": "Paid",
+      "issue_date": "2026-07-01",
+      "due_date": "2026-07-15",
+      "line_items": [
+        {
+          "description": "SEO retainer \u2014 July",
+          "amount": 2000,
+          "quantity": 1
+        }
+      ]
+    },
+    {
+      "id": "inv-2",
+      "invoice_number": "INV-1002",
+      "company_id": "co-brightw",
+      "company": "Brightwater Dental",
+      "amount": 3500,
+      "status": "Sent",
+      "issue_date": "2026-08-01",
+      "due_date": "2026-08-15",
+      "line_items": [
+        {
+          "description": "Website design \u2014 deposit",
+          "amount": 3500,
+          "quantity": 1
+        }
+      ]
+    }
+  ],
+  "contracts": [
+    {
+      "id": "ctr-1",
+      "company_id": "co-acme",
+      "company": "Acme Industrial",
+      "service_type": "SEO",
+      "value": 24000,
+      "status": "Fully Executed",
+      "start_date": "2026-01-01",
+      "end_date": "2026-12-31",
+      "billing_cycle": "Monthly",
+      "items": [],
+      "assigned_rep": "Jonathan Graviss"
+    },
+    {
+      "id": "ctr-2",
+      "company_id": "co-brightw",
+      "company": "Brightwater Dental",
+      "service_type": "Web Design",
+      "value": 12500,
+      "status": "Sent",
+      "start_date": "2026-09-01",
+      "end_date": "2027-08-31",
+      "billing_cycle": "One-time",
+      "items": [],
+      "assigned_rep": "Jonathan Graviss"
+    }
+  ],
+  "signature_requests": [
+    {
+      "id": "sig-1",
+      "contract_id": "ctr-2",
+      "token": "test-signature-token",
+      "signer_email": "owen@brightwater.test",
+      "signer_name": "Owen Patel",
+      "type": "client",
+      "status": "pending",
+      "created_at": "2026-08-01T12:00:00Z",
+      "expires_at": "2027-08-01T12:00:00Z"
+    },
+    {
+      "id": "sig-2",
+      "contract_id": "ctr-1",
+      "token": "expired-signature-token",
+      "signer_email": "maya@acme.test",
+      "signer_name": "Maya Chen",
+      "type": "client",
+      "status": "signed",
+      "signed_at": "2026-01-05T09:00:00Z",
+      "created_at": "2026-01-01T09:00:00Z",
+      "expires_at": "2026-02-01T09:00:00Z"
+    }
+  ],
+  "projects": [
+    {
+      "id": "pj-1",
+      "name": "Acme site refresh",
+      "company_id": "co-acme",
+      "company": "Acme Industrial",
+      "status": "In Progress",
+      "progress": 40,
+      "start_date": "2026-07-01",
+      "due_date": "2026-10-01"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "tk-1",
+      "title": "Draft Q3 SEO report",
+      "project_id": "pj-1",
+      "status": "In Progress",
+      "assignee": "Jonathan Graviss",
+      "due_date": "2026-08-20",
+      "sort_order": 1
+    },
+    {
+      "id": "tk-2",
+      "title": "Keyword gap analysis",
+      "project_id": "pj-1",
+      "status": "To Do",
+      "assignee": "Dana Reyes",
+      "due_date": "2026-08-25",
+      "sort_order": 2
+    }
+  ],
+  "time_entries": [
+    {
+      "id": "te-1",
+      "team_member_id": "tm-jonathan",
+      "team_member": "Jonathan Graviss",
+      "company_id": "co-acme",
+      "hours": 3.5,
+      "billable": true,
+      "invoiced": false,
+      "date": "2026-08-05",
+      "description": "SEO audit"
+    }
+  ],
+  "tickets": [
+    {
+      "id": "tkt-1",
+      "subject": "Contact form not sending",
+      "company_id": "co-acme",
+      "company": "Acme Industrial",
+      "status": "Open",
+      "priority": "High",
+      "messages": [
+        {
+          "from": "maya@acme.test",
+          "body": "Our contact form stopped emailing us.",
+          "at": "2026-08-06T10:00:00Z"
+        }
+      ],
+      "created_at": "2026-08-06T10:00:00Z"
+    }
+  ],
+  "portal_clients": [
+    {
+      "id": "pc-1",
+      "email": "maya@acme.test",
+      "contact": "Maya Chen",
+      "company": "Acme Industrial",
+      "company_id": "co-acme",
+      "status": "active",
+      "portal_role": "client",
+      "services": [
+        "SEO",
+        "Web Design"
+      ]
+    }
+  ],
+  "portal_notifications": [],
+  "broadcasts": [
+    {
+      "id": "bc-1",
+      "name": "August newsletter",
+      "status": "sent",
+      "total_delivered": 120,
+      "total_opened": 44,
+      "total_clicked": 9,
+      "total_bounced": 2,
+      "total_unsubscribed": 1
+    }
+  ],
+  "broadcast_recipients": [],
+  "automations": [
+    {
+      "id": "au-1",
+      "name": "New lead welcome",
+      "trigger": "contact_created",
+      "active": true,
+      "runs": 12,
+      "last_run": "2026-08-06T08:00:00Z",
+      "actions": [
+        "Send Email",
+        "Create Task"
+      ],
+      "status": "Active"
+    }
+  ],
+  "crm_activities": [],
+  "knowledge_articles": [
+    {
+      "id": "kb-1",
+      "title": "How we report on SEO",
+      "category": "Reporting",
+      "status": "published",
+      "body": "We report monthly.",
+      "views": 3,
+      "helpful_count": 1,
+      "not_helpful_count": 0
+    }
+  ],
+  "audit_logs": [],
+  "notifications": [],
+  "monitored_sites": [],
+  "tracked_keywords": [],
+  "scheduled_emails": [],
+  "social_posts": [],
+  "proposals": [],
+  "renewals": [],
+  "maintenance": [],
+  "courses": [],
+  "course_enrollments": [],
+  "forms": [],
+  "form_submissions": [],
+  "sequences": [],
+  "sequence_enrollments": [],
+  "sequence_suppression_list": [],
+  "booking_types": [],
+  "bookings": [],
+  "calendar_settings": [],
+  "google_integrations": [],
+  "client_integrations": []
+}

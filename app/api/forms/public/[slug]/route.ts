@@ -8,6 +8,7 @@ import { extractUtmFromBody } from '@/lib/attribution'
 import { getFirstPipelineStageName } from '@/lib/pipelines'
 import { resolveSafeIp, createPinnedDispatcher } from '@/lib/ssrf-guard'
 import type { Agent } from 'undici'
+import { escapeHtml } from '@/lib/html-escape'
 
 // CORS — forms get embedded on external websites
 const corsHeaders = {
@@ -326,10 +327,3 @@ async function sendFormWebhook(url: string, payload: unknown): Promise<void> {
 // respondent's own name are interpolated into HTML emails sent to real
 // staff/client inboxes (the notify-email and confirmation-email below),
 // so they must be escaped before interpolation.
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}

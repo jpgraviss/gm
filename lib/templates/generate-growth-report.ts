@@ -3,6 +3,7 @@ import type { AppSettings } from '@/lib/settings'
 import { BRAND_COLORS } from '@/lib/brand'
 import type { ClientReportData } from '@/lib/client-reports'
 import type { GrowthNarrative } from '@/lib/report-narrative'
+import { escapeHtml } from '@/lib/html-escape'
 
 export interface WorkLogCategory {
   title: string
@@ -33,9 +34,6 @@ export interface GrowthReportData {
 // modal with no server-side sanitization, then interpolated directly into
 // this HTML email with no escaping, matching the bug class already fixed
 // at #386/#529/#540/#570.
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
 
 function round1(n: number): number {
   return Math.round(n * 10) / 10

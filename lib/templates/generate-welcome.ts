@@ -1,12 +1,10 @@
 import { renderTemplate } from './template-helpers'
 import { buildSequenceUnsubscribeUrl } from '@/lib/sequence-unsubscribe'
+import { escapeHtml } from '@/lib/html-escape'
 
 // AUDIT #621 — accountManager fields are interpolated directly into the
 // template literal below (not via renderTemplate's variables map), so
 // they need their own escaping.
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-}
 
 export interface WelcomeEmailData {
   firstName: string

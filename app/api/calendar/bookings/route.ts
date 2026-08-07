@@ -8,14 +8,12 @@ import { getSettings } from '@/lib/settings'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 import { nowInZone, zonedWallTimeToUtc } from '@/lib/timezone'
+import { escapeHtml } from '@/lib/html-escape'
 
 // AUDIT #602 — booking_types.name/calendar_settings.user_name are
 // self-service, staff-editable fields interpolated straight into this
 // confirmation email's HTML body with no escaping — the same bug class
 // already fixed at #570/#307, never applied to the booking flow.
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
 
 // AUDIT #228 — this route had none of the protections its legacy sibling
 // (app/api/bookings/route.ts) has. Same simple per-IP limiter, ported as-is

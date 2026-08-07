@@ -7,6 +7,7 @@ import { getStripeSecretKey, createInvoiceCheckoutSession } from '@/lib/stripe'
 import { logActivity } from '@/lib/activity-log'
 import { formatUsd } from '@/lib/format-currency'
 import { normalizeCompanyName } from '@/lib/company-match'
+import { escapeHtml } from '@/lib/html-escape'
 
 /**
  * Emails an invoice to the client, with a Stripe payment link when Stripe is
@@ -51,10 +52,6 @@ interface InvoiceRow {
   service_type: string | null
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-}
 
 /** Human date, or the raw string if it isn't parseable. */
 function formatDate(value: string | null): string {

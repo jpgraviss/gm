@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { withErrorHandler } from '@/lib/api-handler'
 import { verifySequenceUnsubscribeToken } from '@/lib/sequence-unsubscribe'
 import { normalizeEmail } from '@/lib/email-normalize'
+import { escapeHtml } from '@/lib/html-escape'
 
 function invalidLinkPage(): NextResponse {
   const html = `<!DOCTYPE html>
@@ -87,13 +88,6 @@ export const GET = withErrorHandler('sequences/unsubscribe GET', async (req: Nex
   })
 })
 
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
 
 export const POST = withErrorHandler('sequences/unsubscribe POST', async (req: NextRequest) => {
   let body: { token?: string }

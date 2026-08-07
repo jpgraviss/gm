@@ -2,6 +2,7 @@ import { createServiceClient } from '@/lib/supabase'
 import { DEFAULT_WORKSPACE_ID } from '@/lib/workspace'
 import { getGSCSearchAnalytics } from '@/lib/google-search-console'
 import { fetchSerpPosition, isSerpConfigured } from '@/lib/serp-provider'
+import { escapeHtml } from '@/lib/html-escape'
 
 export interface TrackedKeyword {
   id: string
@@ -594,9 +595,6 @@ const FREQUENCY_INTERVAL_MS: Record<string, number> = {
   monthly:   30 * 24 * 60 * 60 * 1000,
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function buildRankingReportHtml(db: any, report: ScheduledReport): Promise<string | null> {

@@ -2,6 +2,7 @@ import { createServiceClient } from './supabase'
 import { sendEmail } from './email'
 import { wrapBrandedEmail } from './email-template'
 import { getSettings } from './settings'
+import { escapeHtml } from '@/lib/html-escape'
 
 // AUDIT — title/message are interpolated straight into an HTML email body
 // below with zero escaping, unlike the established convention elsewhere in
@@ -11,9 +12,6 @@ import { getSettings } from './settings'
 // that verbatim from a raw inbound email's Subject header with no
 // sanitization, so this was reachable by anyone who emails a monitored
 // support inbox with HTML in the subject line.
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
 
 export async function notifyPortalClient(
   portalClientId: string,

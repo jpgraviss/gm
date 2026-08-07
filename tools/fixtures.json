@@ -336,11 +336,21 @@
   "social_posts": [],
   "proposals": [],
   "renewals": [],
-  "courses": [],
+  "courses": [
+    {
+      "id": "crs-1",
+      "title": "Sales Foundations"
+    }
+  ],
   "course_enrollments": [],
   "forms": [],
   "form_submissions": [],
-  "sequences": [],
+  "sequences": [
+    {
+      "id": "seq-1",
+      "name": "New lead nurture"
+    }
+  ],
   "sequence_enrollments": [],
   "sequence_suppression_list": [],
   "booking_types": [],
@@ -372,5 +382,20 @@
       "company_id": "co-acme"
     }
   ],
-  "maintenance_records": []
+  "maintenance_records": [],
+  "audits": [
+    {
+      "id": "aud-1",
+      "website_url": "https://acmeindustrial.example",
+      "company": "Acme Industrial",
+      "company_id": "co-acme"
+    }
+  ],
+  "chatbots": [
+    {
+      "id": "cb-1",
+      "name": "Acme site assistant",
+      "company_id": "co-acme"
+    }
+  ]
 }

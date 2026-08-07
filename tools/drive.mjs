@@ -19,14 +19,17 @@
  *                  a finding, so they are counted separately.
  */
 import { chromium } from 'playwright-core'
-import { staticRoutes } from './routes.mjs'
+import { readFileSync } from 'node:fs'
+import { staticRoutes, dynamicRoutes } from './routes.mjs'
 
 const COOKIE = process.env.HARNESS_COOKIE
 const BASE = 'http://localhost:3000'
 const DELAY = Number(process.env.HARNESS_DELAY ?? 400)
 if (!COOKIE) { console.error('HARNESS_COOKIE not set'); process.exit(1) }
 
-const PAGES = process.env.HARNESS_PAGES?.split(',') ?? staticRoutes()
+const fixtures = JSON.parse(readFileSync(new URL('./fixtures.json', import.meta.url), 'utf-8'))
+const dyn = dynamicRoutes(fixtures)
+const PAGES = process.env.HARNESS_PAGES?.split(',') ?? [...staticRoutes(), ...dyn.routes]
 
 /**
  * Strings from tools/fixtures.json that should surface if data rendered.
@@ -115,6 +118,12 @@ for (const route of PAGES) {
 }
 
 console.log(`\npages with a bounce or error: ${failures}/${PAGES.length}`)
+if (!process.env.HARNESS_PAGES) {
+  // Coverage gaps are reported, never hidden: a detail page nobody drives
+  // looks identical to one that passes.
+  if (dyn.unmapped.length) console.log(`\ndynamic routes with no fixture mapping (not crawled): ${dyn.unmapped.join(', ')}`)
+  if (dyn.empty.length) console.log(`dynamic routes whose fixture table is empty (not crawled): ${dyn.empty.join(', ')}`)
+}
 if (throttled) {
   console.log(`${throttled} page(s) saw a 429 — that is this crawl rate-limiting the app, not a finding. Raise HARNESS_DELAY to confirm a result on those.`)
 }

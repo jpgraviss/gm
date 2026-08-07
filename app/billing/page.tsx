@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/components/ui/Toast'
 import LoadingScreen from '@/components/ui/LoadingScreen'
+import { collectedAmount } from '@/lib/invoice-collected'
 
 const statuses: InvoiceStatus[] = ['Pending', 'Sent', 'Overdue', 'Paid', 'Cancelled']
 
@@ -77,7 +78,7 @@ function downloadReceipt(invoice: Invoice) {
         <p>${invoice.id.toUpperCase()}</p>
       </div>
       <div class="body">
-        <div class="amount">$${(invoice.amountPaid ?? invoice.amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
+        <div class="amount">$${collectedAmount(invoice).toLocaleString('en-US', { minimumFractionDigits: 2 })}</div>
         <div class="row"><span class="label">Company</span><span class="value">${invoice.company}</span></div>
         <div class="row"><span class="label">Service Type</span><span class="value">${invoice.serviceType}</span></div>
         <div class="row"><span class="label">Issued Date</span><span class="value">${invoice.issuedDate}</span></div>
@@ -797,9 +798,11 @@ export default function BillingPage() {
     sent: localInvoices.filter(i => i.status === 'Sent').length,
     overdue: localInvoices.filter(i => i.status === 'Overdue').reduce((s, i) => s + i.amount, 0),
     // AUDIT #587 — an invoice's amount can be edited after Stripe payment
-    // (#358); amountPaid records what was actually charged. Prefer it,
-    // falling back to amount only when unset (manual/non-Stripe payments).
-    collected: localInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + (i.amountPaid ?? i.amount), 0),
+    // (#358); amountPaid records what was actually charged, so prefer it.
+    // AUDIT #776 — via collectedAmount(), because `amountPaid ?? amount`
+    // read every hand-marked-Paid invoice as $0: the column is NOT NULL
+    // DEFAULT 0 and only Stripe ever writes it, so `??` never fell back.
+    collected: localInvoices.filter(i => i.status === 'Paid').reduce((s, i) => s + collectedAmount(i), 0),
     outstanding: localInvoices.filter(i => ['Sent', 'Overdue'].includes(i.status)).reduce((s, i) => s + i.amount, 0),
     mrr: computeMRR(contracts),
   }
@@ -808,7 +811,7 @@ export default function BillingPage() {
   const paidInvoices = localInvoices.filter(i => i.status === 'Paid')
   const serviceMap = new Map<string, number>()
   for (const inv of paidInvoices) {
-    serviceMap.set(inv.serviceType, (serviceMap.get(inv.serviceType) ?? 0) + (inv.amountPaid ?? inv.amount))
+    serviceMap.set(inv.serviceType, (serviceMap.get(inv.serviceType) ?? 0) + collectedAmount(inv))
   }
   const serviceBreakdown = Array.from(serviceMap.entries())
     .map(([service, amount]) => ({ service, amount }))
@@ -992,7 +995,7 @@ export default function BillingPage() {
                   {/* AUDIT #635 — always summed raw, editable amount; a Paid
                       invoice's amount can drift from what Stripe actually
                       collected (#358/#587), so prefer amountPaid for Paid rows. */}
-                  {filtered.length} · {formatCurrency(filtered.reduce((s, i) => s + (i.status === 'Paid' ? (i.amountPaid ?? i.amount) : i.amount), 0))}
+                  {filtered.length} · {formatCurrency(filtered.reduce((s, i) => s + (i.status === 'Paid' ? collectedAmount(i) : i.amount), 0))}
                 </span>
               </div>
             </div>

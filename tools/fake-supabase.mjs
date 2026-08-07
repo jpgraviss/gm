@@ -23,6 +23,7 @@ import { createServer } from 'node:http'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
+import { readSchema, applyDefaults } from './schema.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const PORT = Number(process.argv[2] || 54321)
@@ -32,6 +33,30 @@ const SEED_EMAIL = 'jonathangraviss@gmail.com'
 /** @type {Record<string, any[]>} */
 const db = JSON.parse(readFileSync(join(here, 'fixtures.json'), 'utf-8'))
 const unmodelled = new Set()
+
+// Fixture rows are INSERTs, so treat them like Postgres would: an omitted NOT
+// NULL column takes its schema default. Without this the fake serves rows with
+// keys simply absent, and the app crashes on values the real database
+// guarantees are present — `statusConfig[auto.status].dot` and
+// `c.assignedRep.split(' ')` both did exactly that, and both looked like real
+// findings until the schema said otherwise. See tools/schema.mjs.
+const schema = readSchema()
+{
+  const errors = []
+  for (const [table, rows] of Object.entries(db)) {
+    if (!schema[table]) continue
+    rows.forEach((row, i) => {
+      const { row: filled, missing } = applyDefaults(table, row, schema)
+      rows[i] = filled
+      for (const col of missing) errors.push(`${table}[${i}] (id=${row.id ?? '?'}) missing NOT NULL column with no default: ${col}`)
+    })
+  }
+  if (errors.length) {
+    console.error('[fake-supabase] fixtures.json does not satisfy supabase/schema.sql:')
+    for (const e of errors) console.error('  -', e)
+    process.exit(1)
+  }
+}
 
 /** PostgREST encodes filters as `col=op.value`. */
 function applyFilters(rows, params) {
@@ -179,6 +204,9 @@ const server = createServer(async (req, res) => {
     const incoming = Array.isArray(payload) ? payload : [payload]
     for (const row of incoming) {
       if (!row.id) row.id = `${table}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+      // Same INSERT semantics the fixtures get at startup, so a row the app
+      // creates mid-run is shaped like one the real database would return.
+      Object.assign(row, applyDefaults(table, row, schema).row)
       const existing = db[table].findIndex(r => r.id === row.id)
       if (existing >= 0) db[table][existing] = { ...db[table][existing], ...row }
       else db[table].push(row)

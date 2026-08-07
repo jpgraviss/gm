@@ -8,6 +8,7 @@ import { logAudit } from '@/lib/audit'
 import { logActivity } from '@/lib/activity-log'
 import { onInvoicePaid } from '@/lib/delivery-sync'
 import { formatUsd } from '@/lib/format-currency'
+import { collectedAmount } from '@/lib/invoice-collected'
 
 // PATCH updates invoice status/payment data
 export const PATCH = withErrorHandler('invoices/[id] PATCH', async (req, { params }: { params: Promise<{ id: string }> }) => {
@@ -104,7 +105,10 @@ export const PATCH = withErrorHandler('invoices/[id] PATCH', async (req, { param
   if (body.status !== undefined && body.status !== before?.status) {
     logActivity({
       type: 'invoice',
-      title: `Invoice ${String(body.status).toLowerCase()} — ${formatUsd(data.amount_paid ?? data.amount)}`,
+      // AUDIT #776 — was `data.amount_paid ?? data.amount`, which recorded
+      // "Invoice paid — $0.00" on the client's timeline for every payment
+      // not taken through Stripe, because amount_paid defaults to 0.
+      title: `Invoice ${String(body.status).toLowerCase()} — ${formatUsd(collectedAmount(data))}`,
       body: `${data.service_type ?? 'General'}${before?.status ? ` · was ${before.status}` : ''}`,
       companyId: data.company_id,
       companyName: data.company,

@@ -17,6 +17,7 @@ credentials or network access to a deployed environment.
 |---|---|
 | `fake-supabase.mjs` | Speaks enough PostgREST for the app's client. Serves `fixtures.json`, persists writes in memory, and mirrors the real atomic-counter RPCs. |
 | `fixtures.json` | Seed data. `jonathangraviss@gmail.com` is the admin team member. |
+| `schema.mjs` | Reads `supabase/schema.sql` so fixture rows get the NOT NULL defaults an `INSERT` would. See "Phantom findings" below. |
 | `mint-session.mjs` | Signs a `gravhub-auth` cookie with the same HMAC scheme as `lib/session-cookie.ts`. |
 | `drive.mjs` | Drives pages in Chromium and reports where each landed, whether seeded data rendered, and any console/page errors. |
 
@@ -90,7 +91,32 @@ and console/page errors. A bounce to `/login` is always a failure; so is a
 page that loads with `data:no` when it should have data. Note that a bouncing
 page reports zero errors and looks calm, so read the landed column first.
 
-Two things this cannot tell you: whether a number is *correct* (only that one
-rendered), and whether a page works against real Postgres — `fake-supabase`
-is not a database, and anything it doesn't model it reports on stderr at
-shutdown rather than answering with `[]`.
+Two things this cannot tell you: whether a page works against real Postgres —
+`fake-supabase` is not a database, and anything it doesn't model it reports on
+stderr at shutdown rather than answering with `[]` — and whether a number is
+*right*, unless you check it against the fixtures yourself. It is worth doing:
+the first substantive find (AUDIT #776, every non-Stripe payment counting as
+$0 of revenue) came from noticing that Billing said `REVENUE COLLECTED $0`
+directly above a tab labelled `Paid (1)`.
+
+## Phantom findings, and why `schema.mjs` exists
+
+The very first two "findings" this harness produced were both fake. An
+Automations page crash on `statusConfig[auto.status].dot`, and a Contracts
+page crash on `c.assignedRep.split(' ')` — both columns are
+`not null default …` in `supabase/schema.sql`, so neither value can be absent
+in a real database. `fixtures.json` had simply omitted them.
+
+That is the harness manufacturing bugs the app cannot have: the same false
+confidence it was built to remove, inverted, and more expensive, because a
+phantom is indistinguishable from a real find until you have chased it.
+
+So fixture rows are now treated the way Postgres treats an `INSERT`: an
+omitted NOT NULL column takes its schema default, and a NOT NULL column with
+*no* default is a hard error that refuses to start the fake rather than an
+`undefined` that resurfaces later as somebody else's stack trace. The same
+rule applies to rows the app creates mid-run.
+
+The practical rule when this harness reports a crash: **check the schema
+before believing it.** If the field is NOT NULL, the fixture is wrong, not the
+app.

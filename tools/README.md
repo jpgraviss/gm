@@ -17,7 +17,8 @@ credentials or network access to a deployed environment.
 |---|---|
 | `fake-supabase.mjs` | Speaks enough PostgREST for the app's client. Serves `fixtures.json`, persists writes in memory, and mirrors the real atomic-counter RPCs. |
 | `fixtures.json` | Seed data. `jonathangraviss@gmail.com` is the admin team member. |
-| `schema.mjs` | Reads `supabase/schema.sql` so fixture rows get the NOT NULL defaults an `INSERT` would. See "Phantom findings" below. |
+| `schema.mjs` | Reads every SQL file under `supabase/` so fixture rows get the NOT NULL defaults an `INSERT` would. See "Phantom findings" below. |
+| `used-tables.mjs` | The tables the app actually queries, from its `.from('…')` call sites. A fixture table nothing reads is rejected at startup. |
 | `mint-session.mjs` | Signs a `gravhub-auth` cookie with the same HMAC scheme as `lib/session-cookie.ts`. |
 | `drive.mjs` | Drives pages in Chromium and reports where each landed, whether seeded data rendered, and any console/page errors. |
 
@@ -120,6 +121,34 @@ rule applies to rows the app creates mid-run.
 The practical rule when this harness reports a crash: **check the schema
 before believing it.** If the field is NOT NULL, the fixture is wrong, not the
 app.
+
+That protection then turned out to be half-built twice over, and both gaps are
+worth knowing about because they are the shape this whole file warns against —
+a check that looks thorough and quietly covers less than you think.
+
+- **It read only `schema.sql`,** which defines 28 tables. The app queries 93,
+  the rest declared across `supabase/migrations/` and `schema_calendar.sql`.
+  So the defaults were silently skipped for two thirds of the schema. It now
+  reads every SQL file, handles `alter table … add column` and `drop column`,
+  and knows 99 tables.
+- **A fixture table nothing queries was invisible.** Four had accumulated —
+  `tasks`, `notifications`, `maintenance`, `pipelines` — every one a guess at
+  a name the app does not use (it reads `app_tasks`, `portal_notifications`,
+  `maintenance_records`, and keeps pipeline config in `app_settings.pipelines`
+  rather than a table). Nothing complained: the fake served those rows to
+  nobody, the pages rendered empty, and the crawl reported `data:no`, which
+  reads exactly like "this page fails to show its data". `/tasks` and
+  `/crm/pipeline` both sat in that state, and the pipeline one cost real time
+  to chase. `used-tables.mjs` now refuses to start on a table no `.from('…')`
+  call site names.
+
+Both were found by taking the parser's own accusations seriously: when it
+started reporting NOT NULL columns the fixtures "omitted", three of the five
+turned out to be the parser misreading multi-column `ALTER` statements — it
+let a later column's `not null` and `default` clauses bleed into the first
+one's definition. Only `broadcasts.subject` was a genuine gap. Worth
+repeating: **when this tooling accuses the fixtures, verify the accusation
+before acting on it**, exactly as you would when it accuses the app.
 
 The same trap has a protocol-shaped version. A crawl reported
 `GET /api/calendar/settings` as a 500 for a user with no calendar configured.

@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { withErrorHandler } from '@/lib/api-handler'
 import { requireRole } from '@/lib/rbac'
 import { issueOAuthState } from '@/lib/oauth-state'
-import { getGmailAuthUrl, isGmailOAuthConfigured } from '@/lib/gmail-oauth'
+import { getGmailAuthUrl } from '@/lib/gmail-oauth'
+import { assertGoogleOAuthConfigured } from '@/lib/google-oauth-config'
 
 /**
  * GET /api/gmail/auth — starts the server-side Gmail OAuth flow (AUDIT #23).
@@ -19,12 +20,10 @@ export const GET = withErrorHandler('gmail/auth GET', async (req) => {
   const denied = await requireRole(req, 'Team Member')
   if (denied) return denied
 
-  if (!isGmailOAuthConfigured()) {
-    return NextResponse.json(
-      { error: 'Google OAuth is not configured on this server — GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must both be set.' },
-      { status: 400 },
-    )
-  }
+  // AUDIT #784 — also checks NEXT_PUBLIC_APP_URL, without which this flow
+  // silently asked Google to return to localhost and failed on Google's own
+  // screen with nothing logged here.
+  assertGoogleOAuthConfigured()
 
   const { state, setCookie } = issueOAuthState('gmail')
   return setCookie(NextResponse.json({ url: getGmailAuthUrl(state) }))

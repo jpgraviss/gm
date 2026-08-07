@@ -3,6 +3,7 @@ import { encrypt, decrypt } from '@/lib/encryption'
 import { DEFAULT_WORKSPACE_ID } from '@/lib/workspace'
 import { isWithinReauthWindow } from '@/lib/oauth-expiry'
 import { NotConfiguredError } from '@/lib/integration-not-configured'
+import { googleRedirectUri } from '@/lib/google-oauth-config'
 
 /**
  * Shared Google OAuth helper for the Phase C marketing products:
@@ -46,7 +47,10 @@ export function allMarketingScopes(): string[] {
 
 export function googleMarketingAuthUrl(state: string): string {
   const clientId = process.env.GOOGLE_CLIENT_ID
-  const redirect = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'}/api/integrations/google-marketing/callback`
+  // AUDIT #784 — the fallback here was the production domain while gmail's
+  // and drive's were localhost, so the four flows disagreed about where
+  // Google should return to.
+  const redirect = googleRedirectUri('marketing')
   if (!clientId) throw new NotConfiguredError('Google', 'Google is not configured. Add its OAuth client credentials in Settings → Integrations.')
 
   const params = new URLSearchParams({
@@ -77,7 +81,10 @@ interface GoogleTokenResponse {
 export async function exchangeGoogleMarketingCode(code: string): Promise<GoogleTokenResponse> {
   const clientId = process.env.GOOGLE_CLIENT_ID
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET
-  const redirect = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://app.gravissmarketing.com'}/api/integrations/google-marketing/callback`
+  // AUDIT #784 — the fallback here was the production domain while gmail's
+  // and drive's were localhost, so the four flows disagreed about where
+  // Google should return to.
+  const redirect = googleRedirectUri('marketing')
 
   if (!clientId || !clientSecret) {
     throw new NotConfiguredError('Google', 'Google is not configured. Add its OAuth client credentials in Settings → Integrations.')

@@ -1,5 +1,6 @@
 import { encrypt, decrypt } from './encryption'
 import { createServiceClient } from './supabase'
+import { googleRedirectUri } from './google-oauth-config'
 
 /**
  * Server-side Gmail OAuth (authorization-code flow) — AUDIT #23.
@@ -33,8 +34,12 @@ export const GMAIL_SCOPES = [
   'https://www.googleapis.com/auth/gmail.send',
 ]
 
+// AUDIT #784 — was `${NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/…`,
+// so a deployment without that variable silently asked Google to send users
+// back to localhost. Google rejects that with redirect_uri_mismatch on its
+// own screen, which this app never sees, so the failure had no trace here.
 export function gmailRedirectUri(): string {
-  return `${process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'}/api/gmail/callback`
+  return googleRedirectUri('gmail')
 }
 
 export function isGmailOAuthConfigured(): boolean {

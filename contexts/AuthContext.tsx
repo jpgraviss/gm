@@ -217,6 +217,34 @@ export function setRememberMeForNextLogin(remember: boolean) {
   try { sessionStorage.setItem(REMEMBER_ME_FLAG, remember ? '1' : '0') } catch {/* ignore */}
 }
 
+/**
+ * Runs `fn` after the current turn of the event loop, specifically so it is
+ * NOT running inside an `onAuthStateChange` callback.
+ *
+ * AUDIT #775. supabase-js invokes those callbacks from inside its own auth
+ * lock (auth-js `GoTrueClient._acquireLock` → `_notifyAllSubscribers`, which
+ * `await`s every subscriber). Any supabase-js call made from within the
+ * callback re-enters `_acquireLock`, takes the "already acquired" branch, and
+ * queues itself behind the outer operation in `pendingInLock` — but that
+ * outer operation is precisely what is waiting on the callback. The two wait
+ * on each other forever.
+ *
+ * The symptom is not a thrown error, which is what made this expensive to
+ * find: the promise simply never settles. In this app that presented as a
+ * signed-in user being bounced to /login, because the mount-time
+ * `getSession()` races a 2s timeout, loses it to the stalled lock, and the
+ * bootstrap's `.catch` sets `loading = false` with `user` still null — at
+ * which point AppShell redirects. Password sign-in was hit hardest:
+ * `signInWithPassword()` itself emits SIGNED_IN from inside the lock, so it
+ * never resolved and app/login/page.tsx's spinner never stopped.
+ *
+ * A macrotask is required, not `queueMicrotask`/`Promise.resolve().then` — a
+ * microtask still drains before the awaiting lock holder returns.
+ */
+function deferOutOfAuthLock(fn: () => void) {
+  setTimeout(fn, 0)
+}
+
 async function establishSessionCookie(accessToken: string): Promise<{ requires2FA?: boolean; email?: string; error?: string } | null> {
   let rememberMe = false
   try {
@@ -437,13 +465,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    // Deliberately NOT an async callback — see deferOutOfAuthLock() above.
+    // Keeping it synchronous makes the constraint structural: there is no way
+    // to reintroduce the AUDIT #775 deadlock here without first re-adding an
+    // `async` that has no reason to be there.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       // Only react to explicit sign-out — NOT to INITIAL_SESSION with null session,
       // because Google SSO users never have a Supabase session and we restore them
       // from localStorage instead.
       if (event === 'SIGNED_OUT') {
         setUser(null)
-        await clearAuthCookie()
+        // Deferred for the same reason as the SIGNED_IN branch below (see
+        // AUDIT #775): this callback runs with the auth lock held, and
+        // clearAuthCookie() retries with backoff for up to ~1.5s. Awaiting
+        // it here would stall every other Supabase call in the tab for that
+        // whole window. setUser(null) stays synchronous so the UI logs out
+        // immediately regardless.
+        deferOutOfAuthLock(() => { void clearAuthCookie() })
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
         // AUDIT.md #343 — app/auth/confirm/page.tsx makes its own explicit
         // POST /api/auth/session call right after a fresh magic-link sign-in
@@ -479,7 +517,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return
         }
         if (session?.user?.email) {
-          await restoreProfile(session.user.email, session.access_token)
+          // AUDIT #775 — deferred out of the callback rather than awaited.
+          // See deferOutOfAuthLock(): awaiting restoreProfile() here
+          // deadlocks the tab outright, because restoreProfile() reads
+          // team_members through supabase-js and that read needs the very
+          // lock this callback is holding.
+          const { email } = session.user
+          const accessToken = session.access_token
+          deferOutOfAuthLock(() => { void restoreProfile(email, accessToken) })
         }
       }
     })

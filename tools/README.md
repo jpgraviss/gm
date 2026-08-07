@@ -42,10 +42,9 @@ HARNESS_COOKIE=$(SESSION_SIGNING_KEY=local-harness-signing-key node tools/mint-s
 `.env.local` is gitignored. Nothing here touches a real database, and no
 email is ever sent — the seeded address is only an identity.
 
-## Status: server-side works, browser-side does not yet
+## Status: working, both server-side and in the browser
 
-**Working, and verified.** The API layer authenticates and returns seeded
-data:
+The API layer authenticates and returns seeded data:
 
 ```
 $ curl -H "Cookie: gravhub-auth=$COOKIE" localhost:3000/api/crm/contacts
@@ -55,26 +54,43 @@ $ curl localhost:3000/api/crm/contacts        # no cookie
 401
 ```
 
-That alone makes this useful for exercising route handlers end to end against
-a persistent store, which the mocked unit tests cannot do.
+And authenticated *pages* now render: all 15 routes in `drive.mjs` land on
+themselves with seeded data on screen, none bounce to `/login`.
 
-**Not working.** Driving authenticated *pages* in the browser still redirects
-to `/login`. What is established so far:
+Getting there took three fixes, each of which had exactly the same misleading
+symptom — `ERR_CONNECTION_RESET`, or nothing at all:
 
-- The `gravhub-auth` cookie is correct — the same value authenticates the API.
-- `contexts/AuthContext.tsx` resolves the signed-in user from
-  `supabase.auth.getUser()`, not from that cookie, so the client needs its own
-  Supabase session.
-- `fake-supabase.mjs` serves `/auth/v1/user`, and `drive.mjs` seeds
-  `localStorage['sb-127-auth-token']`. Both were confirmed present — the seed
-  lands and is the only `sb-` key.
-- CORS was one real cause and is fixed: supabase-js sends `apikey` and
-  `authorization`, both non-simple, so every call is preflighted, and the
-  missing `Access-Control-Allow-Headers` surfaced as `ERR_CONNECTION_RESET`
-  rather than anything CORS-shaped.
-- After that fix the redirect persists, so `AuthContext` is rejecting the user
-  somewhere past `getUser()`. That is where the next session should pick up —
-  instrument `AuthContext`'s bootstrap and find which branch nulls the user.
+1. **CORS.** supabase-js sends `apikey` and `authorization`, both non-simple,
+   so every call is preflighted. The missing `Access-Control-Allow-Headers`
+   killed the preflight, which the browser reports as a connection reset
+   rather than anything CORS-shaped.
+2. **CSP (AUDIT #774).** `next.config.ts` hardcoded
+   `connect-src … https://*.supabase.co`, so the browser refused to open any
+   connection to `http://127.0.0.1:54321` — zero requests left the tab. The
+   origin is now derived from `NEXT_PUBLIC_SUPABASE_URL`. This was a real
+   production bug too: any deployment on self-hosted Supabase or a custom
+   domain was silently blocked the same way.
+3. **The auth-lock deadlock (AUDIT #775).** `contexts/AuthContext.tsx` awaited
+   a Supabase read inside its `onAuthStateChange` callback. supabase-js runs
+   those callbacks while holding its auth lock, so the read waited on a lock
+   held by the thing waiting on the read. Nothing threw; the promise just
+   never settled. This one was **not** a harness artifact — it broke password
+   sign-in in production, and it is the reason the app kept bouncing to
+   `/login`. Guarded by
+   `tests/unit/lib/auth-state-change-callsite.test.ts`.
 
-Do not treat a green `drive.mjs` run as meaningful until that is resolved; a
-page that bounces to `/login` reports no errors and looks calm.
+Only #1 was the harness's own fault. #2 and #3 were real defects the harness
+existed to find, and found within an hour of first working — which is the
+argument for keeping it.
+
+## Reading a run
+
+`drive.mjs` prints, per page: where it landed, whether seeded data rendered,
+and console/page errors. A bounce to `/login` is always a failure; so is a
+page that loads with `data:no` when it should have data. Note that a bouncing
+page reports zero errors and looks calm, so read the landed column first.
+
+Two things this cannot tell you: whether a number is *correct* (only that one
+rendered), and whether a page works against real Postgres — `fake-supabase`
+is not a database, and anything it doesn't model it reports on stderr at
+shutdown rather than answering with `[]`.

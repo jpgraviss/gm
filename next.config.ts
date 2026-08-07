@@ -1,6 +1,22 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
+/**
+ * The origin the browser is allowed to reach Supabase on, taken from the URL
+ * the app is configured with. Falls back to the hosted wildcard so a build
+ * without the variable set still produces the previous policy rather than a
+ * CSP that blocks everything. See the connect-src comment below (AUDIT #774).
+ */
+const supabaseOrigin = (() => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  if (!url) return 'https://*.supabase.co'
+  try {
+    return new URL(url).origin
+  } catch {
+    return 'https://*.supabase.co'
+  }
+})()
+
 const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/wordpress/plugin/download': ['./wordpress/gravhub-seo/**/*'],
@@ -109,7 +125,16 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com",
               "img-src 'self' data: https: blob:",
               "font-src 'self' data: https://fonts.gstatic.com",
-              "connect-src 'self' https://*.supabase.co https://api.resend.com https://oauth2.googleapis.com https://www.googleapis.com https://api.groq.com https://accounts.google.com https://*.sentry.io",
+              // AUDIT #774 — the Supabase origin is derived from the URL the
+              // app is actually configured with, not assumed to match
+              // `*.supabase.co`. That pattern silently breaks any deployment
+              // pointing at a self-hosted Supabase or a custom domain: the
+              // browser blocks every auth and data call before it leaves the
+              // tab, and the only symptom is an app that looks logged out.
+              // Found because it did exactly that to the local test harness
+              // (tools/), where it presented as ERR_CONNECTION_RESET with no
+              // requests reaching the server at all.
+              `connect-src 'self' ${supabaseOrigin} https://api.resend.com https://oauth2.googleapis.com https://www.googleapis.com https://api.groq.com https://accounts.google.com https://*.sentry.io`,
               "frame-src https://accounts.google.com",
             ].join('; '),
           },

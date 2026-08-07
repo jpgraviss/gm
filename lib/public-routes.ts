@@ -13,6 +13,19 @@ export function isPublicRoute(pathname: string, isLoggedIn: boolean): boolean {
     || pathname.startsWith('/book/')
     || pathname.startsWith('/unsubscribe/')
     || pathname.startsWith('/go/')
+    // AUDIT #773 — these were missing, so an external recipient following a
+    // contract-signature or proposal link was bounced to /login for an app
+    // they have no account in. The server side already treats them as
+    // public (`/api/signatures/` and `/api/proposals/view/` are both in
+    // proxy.ts's PUBLIC_PREFIXES); only this client-side list disagreed,
+    // and the two lists live in different files with nothing pairing them.
+    || pathname.startsWith('/sign/')
+    || pathname.startsWith('/proposal/')
+    // Legacy short links. Each is a server component that redirects to its
+    // /go/* equivalent, but they are still evaluated by this gate first.
+    || pathname.startsWith('/p/')
+    || pathname.startsWith('/b/')
+    || pathname.startsWith('/f/')
     || pathname === '/demo'
     || pathname.startsWith('/demo/')
 }

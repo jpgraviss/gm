@@ -4,27 +4,26 @@ import { createServiceClient } from '@/lib/supabase'
 import { getAuditSystemPrompt } from '@/lib/audit-template'
 import { getGSCCoreWebVitals } from '@/lib/google-search-console'
 import { withErrorHandler } from '@/lib/api-handler'
+import { parseWebsiteUrl, fetchSafeHtml } from '@/lib/website-fetch'
 import { getAuthUser, requireRole } from '@/lib/rbac'
 import { logAudit } from '@/lib/audit'
 import { parsePagination, applyCursor, slicePage, paginatedJson } from '@/lib/pagination'
 import type { AuditSectionResult, AuditType } from '@/lib/types'
 
+// AUDIT #764 — this was a bare fetch() on a caller-supplied URL with
+// `redirect: 'follow'`, and the first 30KB of whatever came back was fed
+// into the audit prompt and stored on the audit row. That made it an SSRF
+// with response exfiltration: any Team Member could point it at
+// http://169.254.169.254/... or an internal service and read the body out
+// of the finished audit. lib/website-fetch.ts exists for exactly this —
+// it resolves the hostname, pins the connection to that address so no
+// second lookup can rebind it, and re-validates every redirect hop.
 async function fetchPageHtml(url: string): Promise<string> {
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 15000)
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'GravHub-SEO-Audit/1.0' },
-      signal: controller.signal,
-      redirect: 'follow',
-    })
-    clearTimeout(timeout)
-    if (!res.ok) return `[Could not fetch page: HTTP ${res.status}]`
-    const html = await res.text()
-    return html.slice(0, 30000)
-  } catch {
-    return '[Could not fetch page: request failed]'
-  }
+  const parsed = parseWebsiteUrl(url)
+  if (!parsed) return '[Could not fetch page: invalid URL]'
+  const result = await fetchSafeHtml(parsed)
+  if (!result.ok) return `[Could not fetch page: ${result.error}]`
+  return result.html.slice(0, 30000)
 }
 
 const AUDIT_SECTIONS: { key: string; label: string; prompt: string }[] = [

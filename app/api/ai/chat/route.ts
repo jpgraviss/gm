@@ -808,7 +808,16 @@ async function executeTool(name: string, input: Record<string, unknown>, actorNa
       const subject = input.subject as string
       const body = input.body as string
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
+        // AUDIT #765 — this read `A || B ? \`https://${VERCEL_URL}\` : localhost`,
+        // which parses as `(A || B) ? ... : ...`, so NEXT_PUBLIC_APP_URL was
+        // only ever consulted as a truthiness test and never actually used.
+        // Wherever VERCEL_URL differs from the configured app URL — a preview
+        // deployment, or any non-Vercel host where it is unset — this became
+        // `https://undefined` and the call failed with a DNS error surfaced to
+        // the user as a generic "Failed to send email". Every other route in
+        // the app uses the `?? fallback` form below.
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+          ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
         const emailRes = await fetch(`${baseUrl}/api/email/send`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -830,7 +839,16 @@ async function executeTool(name: string, input: Record<string, unknown>, actorNa
       const signerName = (input.signer_name as string) || null
       const sigType = (input.type as string) || 'client'
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
+        // AUDIT #765 — this read `A || B ? \`https://${VERCEL_URL}\` : localhost`,
+        // which parses as `(A || B) ? ... : ...`, so NEXT_PUBLIC_APP_URL was
+        // only ever consulted as a truthiness test and never actually used.
+        // Wherever VERCEL_URL differs from the configured app URL — a preview
+        // deployment, or any non-Vercel host where it is unset — this became
+        // `https://undefined` and the call failed with a DNS error surfaced to
+        // the user as a generic "Failed to send email". Every other route in
+        // the app uses the `?? fallback` form below.
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL
+          ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
         const sigRes = await fetch(`${baseUrl}/api/signatures`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

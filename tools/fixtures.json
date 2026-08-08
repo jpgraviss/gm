@@ -397,5 +397,23 @@
       "name": "Acme site assistant",
       "company_id": "co-acme"
     }
+  ],
+  "rank_tracker_competitors": [
+    {
+      "id": "rtc-1",
+      "domain": "competitor.test",
+      "label": "Competitor Co"
+    }
+  ],
+  "saved_filters": [
+    {
+      "id": "sf-1",
+      "name": "Open leads",
+      "entity_type": "contacts",
+      "criteria": {
+        "lifecycle_stage": "Lead"
+      },
+      "created_by": "Jonathan Graviss"
+    }
   ]
 }

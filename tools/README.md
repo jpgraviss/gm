@@ -135,6 +135,40 @@ button's centre instead of the bare Playwright timeout. That one line is the
 difference between "Timeout 30000ms exceeded" and "covered by `<div
 class="fixed bottom-0 …">`", and it is how #785 was identified.
 
+### Deletes and edits, and why they needed two more pieces
+
+Create-only scenarios never touch the paths that historically broke. AUDIT #294
+and #121 were both *delete* bugs: the row disappears from the screen
+optimistically and the DELETE that follows fails, so the UI and the database
+disagree until the next reload. `absent:` scenarios cover that — but they only
+mean something if the page they check would have shown the row, so each one
+creates it first, reloads, and only then deletes. A run that finds the page
+empty reports that instead of passing.
+
+Getting those to pass truthfully needed two things that are easy to get wrong:
+
+- **Waiting for the app to finish writing.** Nothing here awaits its own
+  mutation; handlers fire `fetch(...)` and update React state. Navigating on a
+  timer cancels whatever is still in flight, and a cancelled DELETE looks
+  exactly like a DELETE that didn't persist. `watchWrites()` tracks outstanding
+  POST/PATCH/PUT/DELETE and the runner waits for them to settle.
+- **Staying under the app's own rate limit.** `proxy.ts` allows 200 API
+  requests per minute per IP; one page load costs ten to twenty, and a scenario
+  costs three page loads. Over the line, the limiter answers 429, the page's
+  fetch resolves to nothing, and the list renders empty — again indistinguishable
+  from a lost write. Backing off *after* a 429 doesn't help, because the window
+  is 60s and the limiter keeps refusing for the rest of it. `watchRateLimit()`
+  counts what the harness sends and pauses before the next burst.
+
+  The pause is timed off the *last* request that has to expire, not the first.
+  Waiting for the oldest frees exactly one slot, so a run over budget by fifty
+  would wait a full minute and still be over — the first version of this stalled
+  a run indefinitely while looking like it was working.
+
+A full run therefore takes a few minutes and will print lines like
+`(paused 47s to stay under the app's 200/min rate limit)`. That is the harness
+being correct, not slow.
+
 ## Phantom findings, and why `schema.mjs` exists
 
 The very first two "findings" this harness produced were both fake. An

@@ -14,8 +14,10 @@
  *
  * Env:
  *   HARNESS_ONLY   substring; run only scenarios whose name contains it
- *   HARNESS_DELAY  ms between scenarios (default 600) — the app rate-limits
- *                  its own API routes and a fast run trips it
+ *   HARNESS_DELAY  ms between scenarios (default 1500) — the app rate-limits
+ *                  its own API routes and a fast run trips it. A 429 rarely
+ *                  surfaces as a 429: it surfaces as a dropdown with nothing
+ *                  in it, or a list that renders empty.
  *
  * ## The reload is the point
  *
@@ -45,9 +47,9 @@
  * four phantom bugs so far, and every one was a difference between it and
  * PostgREST rather than a defect in the app.
  */
-import { openSession, watchErrors, BASE } from './browser.mjs'
+import { openSession, watchErrors, watchWrites, watchRateLimit, BASE } from './browser.mjs'
 
-const DELAY = Number(process.env.HARNESS_DELAY ?? 600)
+const DELAY = Number(process.env.HARNESS_DELAY ?? 1500)
 const ONLY = process.env.HARNESS_ONLY
 const ACT_TIMEOUT = 10000
 
@@ -59,9 +61,16 @@ const stamp = () => `harness-${Math.random().toString(36).slice(2, 8)}`
 // ---------------------------------------------------------------------------
 
 /**
- * `run` performs the action and returns whatever identifies what it created.
- * `persists` turns that into the text that must be on the page after a fresh
- * navigation back to `route`; return null to skip the reload check.
+ * `run` performs the action and returns whatever identifies what it touched.
+ * `persists` turns that into text that must be on the page after a fresh
+ * navigation back to `route`; `absent` into text that must *not* be. Give one
+ * or the other — or neither, to skip the reload check.
+ *
+ * `absent` is for the delete and revert paths, and it is the harder assertion
+ * to get right: "not on the page" is also true when the page failed to load,
+ * rendered empty, or bounced. Every `absent` scenario therefore creates the
+ * row first, in the same run, so the reload has to show a page that *would*
+ * have contained it.
  */
 const SCENARIOS = [
   {
@@ -168,6 +177,66 @@ const SCENARIOS = [
     },
     persists: note => note,
   },
+
+  {
+    name: 'tasks: delete a task',
+    route: '/tasks',
+    // The delete path, not the create path. Every list here removes the row
+    // optimistically and only then sends the DELETE — so a DELETE that fails
+    // leaves a screen that says the row is gone and a database that disagrees,
+    // until the next reload. AUDIT #294 and #121 were both this shape, and a
+    // create-only scenario would never touch it.
+    async run(page, t) {
+      const title = `${stamp()} doomed`
+      await t.click('New Task')
+      await t.fill('e.g. Follow up on Apex proposal', title)
+      await t.step('set the due date', () =>
+        page.locator('input[type="date"]').first().fill('2026-12-31'))
+      await t.submit('Create Task')
+      await page.waitForTimeout(1500)
+
+      // Reload first, so the row being deleted is one the server served —
+      // not the optimistic copy the create just put in React state.
+      await t.reload('/tasks', title)
+      await t.step('open the task', () => page.getByText(title, { exact: false }).first().click())
+      // `confirm('Delete this task?')` — the dialog handler in browser.mjs
+      // accepts it; without one this click would simply never return.
+      await t.step('delete it', () =>
+        page.getByTitle('Delete task').first().click({ timeout: ACT_TIMEOUT }))
+      return title
+    },
+    absent: title => title,
+  },
+
+  {
+    name: 'time-tracking: edit an entry',
+    route: '/time-tracking',
+    // The update path. A PATCH that drops the edited field, or a form that
+    // posts the original values back, both look identical on screen until the
+    // page is reloaded.
+    async run(page, t) {
+      const note = `${stamp()} draft`
+      await t.click('Log Time')
+      await t.fill('What did you work on?', note)
+      await t.step('set the duration', () =>
+        page.getByPlaceholder('0', { exact: true }).first().fill('1'))
+      await t.submit('Save Entry')
+      await page.waitForTimeout(1500)
+
+      await t.reload('/time-tracking', note)
+      const edited = `${note} EDITED`
+      // Scoped to the row that holds this note — the Edit control is a
+      // hover-revealed icon repeated on every row, so an unscoped match would
+      // edit whichever entry happened to be first.
+      await t.step('open the entry for editing', () =>
+        page.locator('div.group').filter({ hasText: note }).first()
+          .getByTitle('Edit').click({ timeout: ACT_TIMEOUT }))
+      await t.fill('What did you work on?', edited)
+      await t.submit('Update Entry')
+      return edited
+    },
+    persists: edited => edited,
+  },
 ]
 
 // ---------------------------------------------------------------------------
@@ -197,6 +266,9 @@ async function whatIsOnTopOf(page, locator) {
     return `<${el.tagName.toLowerCase()} class="${cls}">`.slice(0, 160)
   }, [box.x + box.width / 2, box.y + box.height / 2]).catch(() => null)
 }
+
+const writes = watchWrites(page)
+const budget = watchRateLimit(page)
 
 for (const scenario of chosen) {
   const watch = watchErrors(page)
@@ -238,8 +310,40 @@ for (const scenario of chosen) {
      */
     pickCompany: name => t.step(`pick company "${name}"`, async () => {
       await page.getByRole('button', { name: 'Select a company...' }).first().click({ timeout: ACT_TIMEOUT })
-      await page.waitForTimeout(400)
-      await page.getByRole('button', { name: new RegExp(name) }).first().click({ timeout: ACT_TIMEOUT })
+      await page.waitForTimeout(600)
+      const option = page.getByRole('button', { name: new RegExp(name) }).first()
+      if (!await option.count()) {
+        // The dropdown loads its options from /api/crm/companies. When that
+        // call is rate-limited the list is simply empty, and the bare click
+        // timeout that follows says nothing about why. Name the cause.
+        const search = await page.getByPlaceholder('Search companies...').count()
+        throw new Error(search
+          ? `the company dropdown is open but has no "${name}" — /api/crm/companies returned nothing (a 429?)`
+          : `the company dropdown did not open`)
+      }
+      await option.click({ timeout: ACT_TIMEOUT })
+    }),
+
+    /**
+     * Navigate to `route` afresh, retrying while the app is rate-limiting us.
+     *
+     * Each scenario costs two full page loads, and the app rate-limits its own
+     * API routes per IP. A 429 almost never looks like a 429 from inside: the
+     * list simply renders empty, which is the same thing the harness is here to
+     * detect. Retrying on a miss is what tells the two apart — a row that is
+     * really missing is still missing after the limiter resets.
+     */
+    reload: (route, mustContain = null, tries = 3) => t.step(`reload ${route}`, async () => {
+      for (let i = 0; i < tries; i++) {
+        await budget.throttle()
+        await page.goto(BASE + route, { waitUntil: 'domcontentloaded', timeout: 60000 })
+        await page.waitForTimeout(2500)
+        if (!mustContain) return
+        const body = (await page.innerText('main').catch(() => '')).replace(/\s+/g, ' ')
+        if (body.includes(mustContain)) return
+        if (i < tries - 1) await page.waitForTimeout(4000 * (i + 1))
+      }
+      throw new Error(`"${mustContain}" never appeared on ${route} across ${tries} loads`)
     }),
 
     /**
@@ -266,26 +370,50 @@ for (const scenario of chosen) {
   }
 
   try {
+    const paused = await budget.throttle()
+    if (paused) console.log(`      (paused ${Math.round(paused / 1000)}s to stay under the app's 200/min rate limit)`)
     await page.goto(BASE + scenario.route, { waitUntil: 'domcontentloaded', timeout: 60000 })
     await page.waitForTimeout(2500)
     if (new URL(page.url()).pathname === '/login') throw new Error('bounced to /login')
 
     value = await scenario.run(page, t)
-    await page.waitForTimeout(1200)   // let the POST land
+    // Wait for the app to finish writing rather than guessing at a duration.
+    // Navigating with a request in flight cancels it, and a cancelled DELETE
+    // is indistinguishable from a delete that does not persist.
+    if (!await writes.idle()) console.log('      (a write was still in flight after 8s)')
 
     const expected = scenario.persists?.(value)
-    if (expected == null) {
+    const forbidden = scenario.absent?.(value)
+    if (expected == null && forbidden == null) {
       outcome = { ok: true, note: 'no reload check' }
     } else {
       where = 'reload and look for the change'
       // A fresh navigation, deliberately: see the header. Optimistic UI makes
-      // the pre-reload screen say yes regardless.
-      await page.goto(BASE + scenario.route, { waitUntil: 'domcontentloaded', timeout: 60000 })
-      await page.waitForTimeout(3000)
+      // the pre-reload screen say yes regardless. Retried for `persists` so a
+      // rate-limited load is not read as a lost write; not retried for
+      // `absent`, where a retry could only turn a pass into a pass.
+      for (let i = 0; i < (expected != null ? 3 : 1); i++) {
+        await budget.throttle()
+        await page.goto(BASE + scenario.route, { waitUntil: 'domcontentloaded', timeout: 60000 })
+        await page.waitForTimeout(3000)
+        const seen = (await page.innerText('main').catch(() => '')).replace(/\s+/g, ' ')
+        if (expected == null || seen.includes(expected) || i === 2) break
+        await page.waitForTimeout(4000 * (i + 1))
+      }
       const body = (await page.innerText('main').catch(() => '')).replace(/\s+/g, ' ')
-      outcome = body.includes(expected)
-        ? { ok: true, note: `persisted: ${expected}` }
-        : { ok: false, note: `gone after reload: ${expected}` }
+      if (expected != null) {
+        outcome = body.includes(expected)
+          ? { ok: true, note: `persisted: ${expected}` }
+          : { ok: false, note: `gone after reload: ${expected}` }
+      } else {
+        // Guard against the empty-page reading of "absent": if the page came
+        // back with nothing on it, absence proves nothing.
+        outcome = body.length < 40
+          ? { ok: false, note: `page came back empty (${body.length} chars), so "absent" means nothing` }
+          : !body.includes(forbidden)
+            ? { ok: true, note: `stayed deleted: ${forbidden}` }
+            : { ok: false, note: `still there after reload: ${forbidden}` }
+      }
     }
   } catch (err) {
     outcome = { ok: false, note: err.message.split('\n')[0].slice(0, 200) }
@@ -311,6 +439,8 @@ for (const scenario of chosen) {
   if (DELAY) await page.waitForTimeout(DELAY)
 }
 
+writes.stop()
+budget.stop()
 console.log(`\nfailing scenarios: ${failed}/${chosen.length}`)
 await browser.close()
 process.exit(failed ? 1 : 0)

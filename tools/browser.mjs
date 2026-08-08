@@ -46,6 +46,13 @@ export async function openSession(cookie = process.env.HARNESS_COOKIE) {
   }, session)
 
   const page = await ctx.newPage()
+
+  // Several destructive actions gate on `confirm('Delete this task?')`. Nothing
+  // handles the dialog by default, so the click that opens it never returns and
+  // the step fails as a timeout with no hint that a dialog is why. Accepting is
+  // right here: a scenario that reaches a confirm meant to reach it.
+  page.on('dialog', d => { d.accept().catch(() => {}) })
+
   return { browser, ctx, page }
 }
 
@@ -72,6 +79,100 @@ export const isNoise = e =>
   // `next dev` serves its own fonts and cancels the request when the page
   // navigates away mid-load. Nothing in the app fetches these.
   /__nextjs_font/.test(e)
+
+/**
+ * Keeps the harness under the app's own rate limit instead of tripping it.
+ *
+ * `proxy.ts` allows 200 API requests per minute per IP. One page load here
+ * costs ten to twenty, so a run that drives several pages crosses it, and the
+ * result is not an error the harness can read: the limiter answers 429, the
+ * page's fetch resolves to nothing, and the list renders empty. That is
+ * indistinguishable from the write never happening — which is the exact thing
+ * the harness exists to detect, so it must not be able to fake it.
+ *
+ * Backing off *after* a 429 does not work either, because the window is 60s
+ * and the limiter keeps refusing for the rest of it. Staying under the budget
+ * is the only version that holds: count what we send, and pause before the
+ * next burst when the last minute is nearly full.
+ */
+export function watchRateLimit(page, { limit = 200, windowMs = 60_000 } = {}) {
+  const sent = []
+  const onRequest = r => {
+    // `/api/:path*` is `proxy.ts`'s matcher, so only those requests are
+    // counted by the limiter. Counting page chunks and RSC payloads too would
+    // put the harness three or four times over its real usage and make it wait
+    // for windows that were never full.
+    if (r.url().startsWith(`${BASE}/api/`)) sent.push(Date.now())
+  }
+  page.on('request', onRequest)
+
+  const recent = () => {
+    const cutoff = Date.now() - windowMs
+    while (sent.length && sent[0] < cutoff) sent.shift()
+    return sent.length
+  }
+
+  return {
+    used: recent,
+    /**
+     * Waits until at least `headroom` requests are free in the window.
+     *
+     * Headroom rather than the raw limit because the next page load spends its
+     * whole share in a couple of seconds, long before anything ages out.
+     *
+     * The wait is timed off the *last* entry that has to expire, not the first.
+     * Waiting for the oldest one frees exactly one slot, so a caller over
+     * budget by fifty would wait a full window and still be over — which is
+     * how the first version of this stalled a run indefinitely without ever
+     * looking stuck.
+     */
+    async throttle(headroom = 60) {
+      const target = limit - headroom
+      if (recent() <= target) return 0
+      const mustExpire = recent() - target
+      const waitMs = Math.max(0, windowMs - (Date.now() - sent[mustExpire - 1])) + 500
+      await page.waitForTimeout(waitMs)
+      return waitMs
+    },
+    stop() { page.off('request', onRequest) },
+  }
+}
+
+/**
+ * Tracks writes in flight, so a run can wait for the app to finish saving.
+ *
+ * Nothing in this app awaits its own mutations before returning — the handlers
+ * fire `fetch(...)` and update React state optimistically. Navigating on a
+ * fixed timer therefore races them, and a navigation cancels an in-flight
+ * request: the DELETE never reaches the server, the browser reports
+ * `net::ERR_ABORTED`, and the row is still there on reload. That reads exactly
+ * like "delete does not persist", which is a real bug this harness is supposed
+ * to be able to find — so the harness must not be able to manufacture it.
+ */
+export function watchWrites(page) {
+  const inFlight = new Set()
+  const isWrite = r => ['POST', 'PATCH', 'PUT', 'DELETE'].includes(r.method())
+  const onRequest = r => { if (isWrite(r)) inFlight.add(r) }
+  const settle = r => inFlight.delete(r)
+
+  page.on('request', onRequest)
+  page.on('requestfinished', settle)
+  page.on('requestfailed', settle)
+
+  return {
+    /** Resolves when no write is outstanding, or after `timeout` either way. */
+    async idle(timeout = 8000) {
+      const deadline = Date.now() + timeout
+      while (inFlight.size && Date.now() < deadline) await page.waitForTimeout(100)
+      return inFlight.size === 0
+    },
+    stop() {
+      page.off('request', onRequest)
+      page.off('requestfinished', settle)
+      page.off('requestfailed', settle)
+    },
+  }
+}
 
 /**
  * Collects console, page, and network errors until you stop it.
